@@ -90,3 +90,81 @@ nav a:active,
 .expiry-badge{display:inline-block;border-radius:8px;padding:4px 8px;font-size:.85em;font-weight:bold}
 .expiry-soon{background:#fff0c2;color:#705003}
 .expiry-expired{background:#ffe0e2;color:#9b273c}
+
+/* Apply consistent depth to every storefront category and product. */
+.category-card,.product-card{
+  --tile-edge:#d7a4b0;
+  background:linear-gradient(155deg,#fffefd 25%,#fae9eb 100%);
+  border-color:#eed4da;
+  border-bottom-color:var(--tile-edge);
+  box-shadow:0 4px 0 -1px var(--tile-edge),0 8px 15px #59244020;
+}
+.category-card{display:flex;flex-direction:column;text-align:center;padding:7px 7px 0}
+.category-card strong{display:grid;place-items:center;flex:1;min-height:44px;overflow-wrap:anywhere}
+.product-card .depth-photo{margin:7px 7px 0}
+.depth-photo,.depth-slide{
+  position:relative;
+  display:block;
+  isolation:isolate;
+  background:radial-gradient(ellipse at 35% 12%,#fff9f6 5%,#f6d7de 60%,#ddb3c1);
+}
+.depth-photo{border-radius:12px;padding:4px 5px 8px}
+.depth-photo img,.depth-slide img{
+  position:relative;
+  z-index:1;
+  border-radius:9px;
+  box-shadow:0 4px 8px #5c2b4436,inset 0 1px #fff;
+}
+.depth-photo::after{
+  content:"";
+  pointer-events:none;
+  position:absolute;
+  inset:auto 11% 3px;
+  height:13%;
+  border-radius:50%;
+  background:#66223f32;
+  filter:blur(3px);
+}
+.product-photos{
+  background:#f5dde3;
+  border:1px solid #e3beca;
+  box-shadow:0 5px 0 #d7a4b0,0 12px 24px #59244026;
+}
+.depth-slide{flex:0 0 100%;min-width:0;scroll-snap-align:start;padding:12px}
+.depth-slide img{width:100%;object-fit:cover}
+@media(hover:hover){
+  .category-card:hover,.product-card:hover{
+    border-color:#c77d94;
+    box-shadow:0 5px 0 -1px var(--tile-edge),0 11px 18px #59244029;
+  }
+}
+.category-card:active{
+  box-shadow:0 1px 0 var(--tile-edge),0 3px 7px #59244024;
+}
+@media(max-width:450px){
+  .category-card{padding:4px 4px 0}
+  .depth-photo{padding:3px 3px 6px}
+  .product-card .depth-photo{margin:4px 4px 0}
+  .depth-slide{padding:8px}
+}
+
+/* Art is framed to the object and pedestal within each category. */
+.category-depth-art{
+  display:block;
+  width:100%;
+  aspect-ratio:318/284;
+  border-radius:9px;
+  position:relative;
+  z-index:1;
+  background-image:url("./category-depth-art.png");
+  background-repeat:no-repeat;
+  background-size:322.01% 540.85%;
+  box-shadow:0 4px 8px #5c2b4436;
+}
+.category-depth-art[data-art="face"]{background-position:96.88% 50.08%}
+.category-depth-art[data-art="eyes"]{background-position:50.85% 50.08%}
+.category-depth-art[data-art="lips"]{background-position:3.26% 50.08%}
+.category-depth-art[data-art="skin"]{background-position:96.88% 80.51%}
+.category-depth-art[data-art="brushes"]{background-position:50.85% 80.51%}
+.category-depth-art[data-art="offers"]{background-position:3.26% 80.51%}
+.category-card .depth-photo img{aspect-ratio:318/284}

@@ -59,7 +59,8 @@ function categoryName(category) {
 function cards(items) {
   items = items.filter(product => !product.hidden);
   return items.length ? '<div class="grid">' + items.map(p =>
-    '<article class="card"><a href="#product/' + p.id + '">' + photo(p.image,productName(p)) +
+    '<article class="card product-card"><a href="#product/' + p.id + '">' +
+    '<span class="depth-photo">' + photo(p.image,productName(p)) + '</span>' +
     '<strong>' + escape(productName(p)) + '</strong></a><span class="price">' + money(p.price) +
     (p.old ? '<del>' + money(p.old) + '</del>' : '') +
     '</span>' + ((p.variants?.length || p.shades?.length) && availableStock(p) > 0
@@ -71,8 +72,11 @@ function cards(items) {
 function categoryCards() {
   return '<div class="grid categories">' + categories.map(category => {
     const [id,,image] = category;
-    return
-    '<a class="card" href="#shop/' + id + '">' + photo(image || id) + '<strong>' + escape(categoryName(category)) + '</strong></a>';
+    const useDepthArt = (!image || image === id) && ['face','eyes','lips','skin','brushes','offers'].includes(id);
+    const art = useDepthArt ? '<span class="category-depth-art" aria-hidden="true" data-art="' + id + '"></span>' : photo(image || id);
+    return '<a class="card category-card" href="#shop/' + id + '">' +
+      '<span class="depth-photo">' + art + '</span>' +
+      '<strong>' + escape(categoryName(category)) + '</strong></a>';
   }).join('') + '</div>';
 }
 function searchBox() {
@@ -163,7 +167,7 @@ function detail(id) {
     .filter(([,value]) => value).map(([key,value]) => '<div class="line"><strong>' + key + '</strong> · <span>' + escape(value) + '</span></div>').join('');
   const images = [...new Set([p.detail || p.image,p.image,...(p.gallery || [])])];
   const gallery = '<div class="product-photos" id="product-photos" tabindex="0" aria-label="صور المنتج">' +
-    images.map(src => photo(src,p.name,'detail')).join('') + '</div>' +
+    images.map(src => '<div class="depth-slide">' + photo(src,productName(p),'detail') + '</div>').join('') + '</div>' +
     (images.length > 1 ? '<div class="row gallery-controls"><button type="button" class="secondary" data-photo-step="-1" aria-label="الصورة السابقة">‹</button>' +
       '<button type="button" class="secondary" data-photo-step="1" aria-label="الصورة التالية">›</button></div>' : '');
   return '<section class="narrow"><a class="button secondary" href="#shop/' + p.category + '">رجوع</a><h1>' + escape(productName(p)) + '</h1>' + gallery +

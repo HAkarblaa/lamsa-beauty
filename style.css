@@ -178,3 +178,11 @@ nav a:active,
 #quick-add-error:empty{display:none}
 #notice a{pointer-events:auto;display:inline-block;margin-inline-start:10px;color:inherit;text-decoration:underline}
 .filter-summary{align-items:center}
+
+.ui-icon{display:block;width:22px;height:22px;flex:none;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+#store-brand{display:inline-flex;align-items:center;gap:8px}
+.brand-mark{display:block;width:36px;height:36px;flex:none}
+#menu-toggle{display:grid;place-items:center}
+#expiry-bell{color:var(--rose)}
+nav>a{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;min-height:49px}
+nav>a[aria-current] .ui-icon{stroke-width:2.2}

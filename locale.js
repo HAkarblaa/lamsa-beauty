@@ -211,6 +211,12 @@ const english = Object.fromEntries(`
 تعديل السلة|Edit cart
 تعديل العنوان|Edit address
 أكمل الاسم والعنوان.|Enter a name and address.
+إشعارات الصلاحية|Expiry notifications
+القريب من الانتهاء يعني خلال 30 يوم.|Expiring soon means within 30 days.
+يوم / شهر / سنة|Day / month / year
+اكتب تاريخ صحيح بترتيب يوم / شهر / سنة.|Enter a valid date in day / month / year order.
+البراند|Brand
+كل البراندات|All brands
 الباركود|Barcode
 مسح الباركود بالكاميرا|Scan barcode with camera
 إغلاق الكاميرا|Close camera

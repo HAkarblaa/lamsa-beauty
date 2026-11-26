@@ -42,7 +42,7 @@ function route() {
 function updateNavigation() {
   const {path} = route();
   const tab = ({shop:'categories',product:'categories',checkout:'cart',review:'cart',login:'account',signup:'account',
-    orders:'account',manage:'account',profile:'account',settings:'account',order:'account'})[path] || path;
+    orders:'account',manage:'account','expiry-notifications':'account',profile:'account',settings:'account',order:'account'})[path] || path;
   document.querySelectorAll('nav a').forEach(link => {
     if (link.hash === '#' + tab) link.setAttribute('aria-current','page');
     else link.removeAttribute('aria-current');
@@ -98,6 +98,18 @@ function home() {
     '<div class="row"><h2>عروض مميزة</h2><a href="#shop/offers">عرض الكل</a></div>' +
     cards(products.filter(p => p.old || p.category === 'offers')) + '</div><div id="results" hidden></div>';
 }
+function brandKey(name) {
+  return (name || '').trim().replace(/\s+/g,' ').toLowerCase();
+}
+function brandOptions(items) {
+  const names = new Map();
+  for (const item of items) {
+    const key = brandKey(item.brand);
+    if (key && !names.has(key)) names.set(key,item.brand);
+  }
+  return [...names].sort(([,left],[,right]) => left.localeCompare(right)).map(([key,name]) =>
+    '<option value="' + escape(key) + '">' + escape(name) + '</option>').join('');
+}
 function shop(id) {
   const category = categories.find(row => row[0] === id);
   const types = [...new Set([...(Object.hasOwn(categoryTypes,id) ? categoryTypes[id] : []),
@@ -107,7 +119,7 @@ function shop(id) {
   const candidates = products.filter(p => !p.hidden && (!id || p.category === id || (id === 'offers' && p.old)));
   const options = values => [...new Set(values.filter(Boolean))].map(value =>
     '<option value="' + escape(value) + '">' + escape(value) + '</option>').join('');
-  const brands = options(candidates.map(p => p.brand));
+  const brands = brandOptions(candidates);
   const shades = options(candidates.flatMap(p => p.variants?.length ? p.variants.map(v => language === 'en' && v.nameEn ? v.nameEn : v.name) : p.shades || []));
   const filters = (brands ? '<label>الماركة<select id="brand-filter"><option value="">كل الماركات</option>' + brands + '</select></label>' : '') +
     (shades ? '<label>الدرجة<select id="shade-filter"><option value="">كل الدرجات</option>' + shades + '</select></label>' : '') +
@@ -130,7 +142,7 @@ function updateResults() {
   const value = id => document.querySelector('#' + id)?.value || '';
   const brand = value('brand-filter'), shade = value('shade-filter');
   const min = value('price-min'), max = value('price-max');
-  const list = products.filter(p => !p.hidden && (!brand || p.brand === brand) &&
+  const list = products.filter(p => !p.hidden && (!brand || brandKey(p.brand) === brand) &&
     (!min || p.price >= Number(min)) && (!max || p.price <= Number(max)) &&
     (!shade || (p.variants?.length ? p.variants.some(v => (language === 'en' && v.nameEn ? v.nameEn : v.name) === shade) : p.shades?.includes(shade))) &&
     (!param || (p.category === param || (param === 'offers' && p.old))) && (!type || productType(p) === type) &&
@@ -301,6 +313,7 @@ function render(scroll = false) {
     shop:() => shop(param), product:() => detail(param), cart, checkout, review:reviewOrder, login:() => login(), signup:() => login(true),
     account, profile, settings, manage:() => managementPage(param), favorites:() => '<h1>المفضلة</h1>' + cards(products.filter(p => !p.hidden && state.favorites.includes(p.id))),
     orders:() => orderContent(), order:() => orderContent(param)};
+  pages['expiry-notifications'] = expiryNotifications;
   view.innerHTML = Object.hasOwn(pages,path) ? pages[path]() : '<h1>الصفحة غير موجودة</h1><a href="#home">الرئيسية</a>';
   if (path === 'home') {
     updateBanner();
@@ -314,6 +327,7 @@ function render(scroll = false) {
   if (path === 'shop') updateResults();
   document.documentElement.style.setProperty('--store-bg',storeBackground());
   view.classList.toggle('has-purchase-bar',Boolean(view.querySelector('.purchase-bar')));
+  updateExpiryBell();
   localize(view);
   document.title = translate(state.settings.name);
   document.querySelector('#store-brand').lastChild.textContent = ' ' + translate(state.settings.name);
@@ -351,9 +365,9 @@ function addProduct(id, shade, qty) {
   notify('تمت إضافة المنتج للسلة');
 }
 view.addEventListener('input', event => {
-  if (['admin-search','admin-category-filter','admin-alert'].includes(event.target.id)) {
+  if (['admin-search','admin-category-filter','admin-alert','admin-brand'].includes(event.target.id)) {
     document.querySelector('#admin-list').innerHTML = catalogRows('products',
-      document.querySelector('#admin-search').value.trim(),document.querySelector('#admin-category-filter').value,document.querySelector('#admin-alert').value);
+      document.querySelector('#admin-search').value.trim(),document.querySelector('#admin-category-filter').value,document.querySelector('#admin-alert').value,document.querySelector('#admin-brand').value);
     localize(document.querySelector('#admin-list'));
   }
   if (['search','sort','type-filter','brand-filter','shade-filter','price-min','price-max'].includes(event.target.id)) updateResults();
@@ -524,6 +538,8 @@ window.addEventListener('hashchange', () => {
   if (quickMenu.open) quickMenu.close();
   render(true);
 });
+document.querySelector('#expiry-bell').hidden = !previewAsManager;
+if (previewAsManager) setInterval(updateExpiryBell,60000);
 const languageSelect = document.querySelector('#store-language');
 languageSelect.value = language;
 document.documentElement.lang = language === 'ar' ? 'ar-IQ' : 'en';

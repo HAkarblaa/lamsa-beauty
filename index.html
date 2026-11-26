@@ -12,7 +12,7 @@
 <script src="app.js" defer></script>
 </head>
 <body>
-<header><a class="brand" id="store-brand" href="#home"><span aria-hidden="true">❀</span> لمسة بيوتي</a><button id="menu-toggle" type="button" aria-label="فتح القائمة المختصرة" aria-controls="quick-menu" aria-expanded="false">☰</button></header>
+<header><a class="brand" id="store-brand" href="#home"><span aria-hidden="true">❀</span> لمسة بيوتي</a><div class="header-actions"><a id="expiry-bell" class="button secondary" href="#expiry-notifications" aria-label="إشعارات الصلاحية" hidden><span aria-hidden="true">🔔</span><b id="expiry-notice-count"></b></a><button id="menu-toggle" type="button" aria-label="فتح القائمة المختصرة" aria-controls="quick-menu" aria-expanded="false">☰</button></div></header>
 <dialog id="quick-menu" aria-labelledby="menu-heading">
   <div class="row"><h2 id="menu-heading">القائمة المختصرة</h2><form method="dialog"><button type="submit" class="secondary" aria-label="إغلاق القائمة">×</button></form></div>
   <div id="menu-main">

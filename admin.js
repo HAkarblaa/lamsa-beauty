@@ -34,7 +34,7 @@ function managementPage(param = '') {
     <a class="button secondary" href="${escape(preview.href)}" target="_blank" rel="noopener">معاينة المتجر</a></div>
     <h2>نظرة عامة</h2><div class="chips">
     <a class="button secondary" href="#manage/products:low"><span>مخزون قليل</span> · ${low}</a>
-    <a class="button secondary" href="#manage/products:expiry"><span>تنبيه الصلاحية</span> · ${expiry}</a>
+    <a class="button secondary" href="#expiry-notifications"><span>تنبيه الصلاحية</span> · ${expiry}</a>
     </div><div class="admin-grid">${tiles.map(([path,title,summary]) =>
       `<a class="panel admin-tile" href="#${path}"><strong>${title}</strong><span>${summary}</span></a>`
     ).join('')}</div><p class="muted">البيانات التجريبية محفوظة في هذا المتصفح.</p></section>`;
@@ -52,21 +52,24 @@ function catalogManagement(kind, edit) {
   const item = edit === undefined || edit === 'new' ? undefined : list[index];
   const base = '#manage/' + kind;
   const heading = `<a class="button secondary" href="#manage">‹ لوحة الإدارة</a><h1>${managementLabels[kind]}</h1>`;
-  const alert = kind === 'products' && ['low','expiry'].includes(edit) ? edit : '';
+  const alert = kind === 'products' && ['low','expiry','soon','expired'].includes(edit) ? edit : '';
   if (edit !== undefined && !alert) {
     if (edit !== 'new' && !item) return heading + '<p>العنصر غير موجود.</p>';
     return heading + '<a class="button secondary" href="' + base + '">رجوع</a>' + catalogForm(kind,item,index);
   }
   const filter = kind === 'products' ? `<div class="admin-filters"><label>بحث بالاسم أو الباركود<input id="admin-search" type="search"></label>
     <label>القسم<select id="admin-category-filter">${categoryOptions('', '<option value="">كل الأقسام</option>')}</select></label>
+    <label>البراند<select id="admin-brand"><option value="">كل البراندات</option>${brandOptions(products)}</select></label>
     <label>تنبيهات المنتجات<select id="admin-alert"><option value="">كل المنتجات</option>
     <option value="low"${alert === 'low' ? ' selected' : ''}>مخزون قليل</option>
-    <option value="expiry"${alert === 'expiry' ? ' selected' : ''}>تنبيه الصلاحية</option></select></label></div>` : '';
+    <option value="expiry"${alert === 'expiry' ? ' selected' : ''}>تنبيه الصلاحية</option>
+    <option value="soon"${alert === 'soon' ? ' selected' : ''}>قريب من انتهاء الصلاحية</option>
+    <option value="expired"${alert === 'expired' ? ' selected' : ''}>منتهي الصلاحية</option></select></label></div>` : '';
   return heading + `<a class="button" href="${base}:new">إضافة ${{categories:'قسم',products:'منتج',banners:'إعلان'}[kind]}</a>` + filter +
     '<div id="admin-list">' + catalogRows(kind,'','',alert) + '</div>';
 }
 
-function catalogRows(kind, query = '', category = '', alert = '') {
+function catalogRows(kind, query = '', category = '', alert = '', brand = '') {
   const list = catalogLists[kind];
   const rows = list.map((item,index) => {
     const isCategory = kind === 'categories';
@@ -74,7 +77,8 @@ function catalogRows(kind, query = '', category = '', alert = '') {
     const name = isCategory ? item[1] : item.name ?? item.title;
     const terms = kind === 'products' ? [name,item.nameEn,item.barcode,translate(name)] : [name];
     if (!terms.some(value => value?.toLowerCase().includes(query.toLowerCase())) ||
-      (category && item.category !== category) || (alert && !productAlerts(item).includes(alert))) return '';
+      (category && item.category !== category) || (brand && brandKey(item.brand) !== brand) ||
+      (alert && !productAlerts(item).includes(alert) && expiryStatus(item.expiry) !== alert)) return '';
     const image = isCategory ? item[2] || id : item.image;
     const summary = kind === 'products' ? money(item.price) + ' · ' + (Number.isFinite(availableStock(item)) ? 'الكمية ' + format.format(availableStock(item)) : 'الكمية غير محددة')
       : kind === 'banners' ? 'الترتيب ' + format.format(index + 1) : '';
@@ -84,7 +88,9 @@ function catalogRows(kind, query = '', category = '', alert = '') {
     return `<article class="panel row admin-row">${photo(image,'','thumb')}<div class="grow"><strong>${escape(name)}</strong>
       <div class="muted">${summary}</div>
       ${kind === 'products' ? `<small>${item.hidden ? 'مخفي' : 'ظاهر'}${item.barcode ? ' · ' + escape(item.barcode) : ''}</small>
-        ${productAlerts(item).map(alert => `<div class="muted">${alert === 'low' ? 'مخزون قليل' : expiryMessage(item)}</div>`).join('')}` : ''}
+        ${item.brand ? `<div class="muted">${escape(item.brand)}</div>` : ''}
+        ${productAlerts(item).includes('low') ? '<div class="muted">مخزون قليل</div>' : ''}
+        ${expiryBadge(item)}` : ''}
       </div><div class="admin-actions">
       <a class="button secondary" href="#manage/${kind}:${id}">تعديل</a>${moves}</div></article>`;
   }).join('');
@@ -102,7 +108,9 @@ function catalogForm(kind, item, index) {
   const extra = isCategory ? '' : isBanner ? `<label>نص زر الإعلان<input name="copy" maxlength="40" required value="${escape(item?.copy || '')}"></label>` :
     `<label>السعر بالدينار العراقي<input name="price" type="number" min="1" max="1000000000" value="${item?.price ?? ''}" required></label>
     <label>الكمية المتوفرة<input name="stock" type="number" min="0" max="1000000" value="${item?.stock == null ? '' : availableStock(item)}"></label>
-    <label>الماركة<input name="brand" maxlength="80" value="${escape(item?.brand || '')}"></label>
+    <label>البراند<input name="brand" list="brand-suggestions" maxlength="80" value="${escape(item?.brand || '')}"></label>
+    <datalist id="brand-suggestions">${[...new Set(products.map(p => p.brand).filter(Boolean))].map(brand =>
+      `<option value="${escape(brand)}"></option>`).join('')}</datalist>
     <label>الحجم<input name="size" maxlength="60" value="${escape(item?.size || '')}"></label>
     <label>نوع البشرة<input name="skin" maxlength="80" value="${escape(item?.skin || '')}"></label>
     <label>درجة التغطية<input name="coverage" maxlength="60" value="${escape(item?.coverage || '')}"></label>
@@ -120,7 +128,8 @@ function catalogForm(kind, item, index) {
       <video muted playsinline aria-label="معاينة كاميرا الباركود" style="width:100%;max-height:240px"></video>
       <button class="secondary" type="button" data-stop-barcode>إغلاق الكاميرا</button>
     </div>
-    <label>تاريخ انتهاء الصلاحية<input name="expiry" type="date" value="${escape(item?.expiry || '')}"></label>
+    <label>تاريخ انتهاء الصلاحية<input name="expiry" type="text" dir="ltr" maxlength="10" placeholder="DD/MM/YYYY" aria-describedby="expiry-format" value="${escape(displayExpiry(item?.expiry))}"></label>
+    <small id="expiry-format">يوم / شهر / سنة</small>
     <label>الوصف<textarea name="description" maxlength="600">${escape(item?.description || '')}</textarea></label>
     <label>صور إضافية للمنتج <small>اختياري، حتى 3 صور</small><input type="file" name="gallery" accept="${imageTypes}" multiple></label>
     ${item?.gallery?.length ? `<small>${item.gallery.length} صور إضافية محفوظة. اختيار صور جديدة يستبدلها.</small>` : ''}`;
@@ -203,7 +212,7 @@ async function saveCatalogItem(form, data) {
       const gallery = files.length ? await Promise.all(files.map(readCatalogImage)) : previous?.gallery;
       item = {...previous,id:previous?.id || id,name,category,image,gallery,price:Number(data.get('price')),
         stock:Number(data.get('stock')) + soldQuantity(previous?.id),description:data.get('description').trim(),
-        type:data.get('type')?.trim() || '',barcode:data.get('barcode')?.trim() || '',expiry:data.get('expiry') || ''};
+        type:data.get('type')?.trim() || '',barcode:data.get('barcode')?.trim() || '',expiry:parseExpiry(data.get('expiry'))};
       for (const field of ['nameEn','descriptionEn','brand','size','skin','coverage','usage']) item[field] = data.get(field)?.trim() || '';
       item.hidden = data.has('hidden');
       item.variants = parseVariants(data.get('variants'),previous?.id);
@@ -326,14 +335,48 @@ function parseVariants(value, id) {
     return {name,color,nameEn,stock:stock + soldQuantity(id,name)};
   });
 }
-function expiryMessage(product) {
-  const now = new Date();
-  const today = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0,10);
-  if (!product.expiry) return '';
-  const days = (Date.parse(product.expiry) - Date.parse(today)) / 86400000;
-  return days < 0 ? 'منتهي الصلاحية' : days <= 30 ? 'قريب من انتهاء الصلاحية' : '';
+function displayExpiry(iso) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(iso || '') ? iso.split('-').reverse().join('/') : '';
+}
+function parseExpiry(value) {
+  const text = (value || '').trim().replace(/[٠-٩۰-۹]/g, digit => String(digit.charCodeAt(0) % 16));
+  if (!text) return '';
+  const parts = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(text);
+  if (parts) {
+    const [,day,month,year] = parts;
+    const iso = year + '-' + month.padStart(2,'0') + '-' + day.padStart(2,'0');
+    const date = new Date(iso + 'T00:00:00Z');
+    if (year !== '0000' && Number.isFinite(date.getTime()) && date.toISOString().startsWith(iso + 'T')) return iso;
+  }
+  throw new Error('اكتب تاريخ صحيح بترتيب يوم / شهر / سنة.');
+}
+function expiryStatus(iso, now = new Date()) {
+  if (!displayExpiry(iso)) return '';
+  const today = Date.UTC(now.getFullYear(),now.getMonth(),now.getDate());
+  const days = (Date.parse(iso) - today) / 86400000;
+  return days < 0 ? 'expired' : days <= 30 ? 'soon' : '';
+}
+const expiryLabels = {soon:'قريب من انتهاء الصلاحية',expired:'منتهي الصلاحية'};
+function expiryBadge(product) {
+  const status = expiryStatus(product.expiry);
+  const date = displayExpiry(product.expiry);
+  if (!date) return '';
+  return `<div class="expiry-meta"><bdi>${date}</bdi> ${status ?
+    `<span class="expiry-badge expiry-${status}">${expiryLabels[status]}</span>` : ''}</div>`;
+}
+function expiryNotifications() {
+  if (!previewAsManager) return '<h1>الرئيسية</h1><a href="#home">الرئيسية</a>';
+  return '<a class="button secondary" href="#manage">رجوع</a><h1>إشعارات الصلاحية</h1><p>القريب من الانتهاء يعني خلال 30 يوم.</p>' +
+    Object.entries(expiryLabels).reverse().map(([status,label]) =>
+      `<h2><span class="expiry-badge expiry-${status}">${label}</span></h2>` + catalogRows('products','','',status)
+    ).join('');
+}
+function updateExpiryBell() {
+  if (!previewAsManager) return;
+  const count = products.filter(product => expiryStatus(product.expiry)).length;
+  document.querySelector('#expiry-notice-count').textContent = count ? format.format(count) : '';
 }
 function productAlerts(product) {
   return [availableStock(product) <= 5 || product.variants?.some(v => availableStock(product,v.name) <= 5) ? 'low' : '',
-    expiryMessage(product) ? 'expiry' : ''].filter(Boolean);
+    expiryStatus(product.expiry) ? 'expiry' : ''].filter(Boolean);
 }

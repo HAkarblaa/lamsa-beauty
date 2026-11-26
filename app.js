@@ -5,8 +5,10 @@ const money = amount => '<bdi dir="ltr">' + format.format(amount) + '</bdi> د.�
 const escape = value => String(value).replace(/[&<>"']/g, char => ({
   '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'
 })[char]);
-const photo = (name, alt = '', css = '') =>
-  '<img class="' + css + '" src="./' + name + '.webp" alt="' + escape(alt) + '">';
+const photo = (name, alt = '', css = '') => {
+  const src = /^data:image\/(webp|png);base64,[a-z0-9+/=]+$/i.test(name) ? name : './' + name + '.webp';
+  return '<img class="' + css + '" src="' + escape(src) + '" alt="' + escape(alt) + '">';
+};
 const previewAsManager = new URLSearchParams(location.search).get('view') !== 'customer';
 const orderLabel = previewAsManager ? 'إدارة الطلبات' : 'طلباتي';
 const defaultSettings = {name:'لمسة بيوتي', contact:'', delivery:4000};
@@ -39,7 +41,7 @@ function route() {
 function updateNavigation() {
   const {path} = route();
   const tab = ({shop:'categories',product:'categories',checkout:'cart',login:'account',signup:'account',
-    orders:'account',profile:'account',settings:'account',order:'account'})[path] || path;
+    orders:'account',manage:'account',profile:'account',settings:'account',order:'account'})[path] || path;
   document.querySelectorAll('nav a').forEach(link => {
     if (link.hash === '#' + tab) link.setAttribute('aria-current','page');
     else link.removeAttribute('aria-current');
@@ -50,14 +52,14 @@ function updateNavigation() {
 function cards(items) {
   return items.length ? '<div class="grid">' + items.map(p =>
     '<article class="card"><a href="#product/' + p.id + '">' + photo(p.image,p.name) +
-    '<strong>' + p.name + '</strong></a><span class="price">' + money(p.price) +
+    '<strong>' + escape(p.name) + '</strong></a><span class="price">' + money(p.price) +
     (p.old ? '<del>' + money(p.old) + '</del>' : '') +
     '</span><button data-add="' + p.id + '">أضيفي للسلة</button></article>').join('') +
     '</div>' : '<p class="panel">ماكو منتجات للعرض حالياً.</p>';
 }
 function categoryCards() {
-  return '<div class="grid categories">' + categories.map(([id,name]) =>
-    '<a class="card" href="#shop/' + id + '">' + photo(id) + '<strong>' + name + '</strong></a>'
+  return '<div class="grid categories">' + categories.map(([id,name,image]) =>
+    '<a class="card" href="#shop/' + id + '">' + photo(image || id) + '<strong>' + escape(name) + '</strong></a>'
   ).join('') + '</div>';
 }
 function searchBox() {
@@ -67,8 +69,8 @@ function updateBanner() {
   const banner = document.querySelector('#banner');
   if (!banner) return;
   const b = banners[slide];
-  banner.innerHTML = '<a class="hero" href="#' + b.route + '"><div><h1>' + b.title +
-    '</h1><span class="button">' + b.copy + '</span></div>' + photo(b.image) + '</a>';
+  banner.innerHTML = '<a class="hero" href="#' + b.route + '"><div><h1>' + escape(b.title) +
+    '</h1><span class="button">' + escape(b.copy) + '</span></div>' + photo(b.image) + '</a>';
   document.querySelectorAll('[data-slide]').forEach((button,i) =>
     button.setAttribute('aria-pressed',String(i === slide)));
 }
@@ -76,12 +78,12 @@ function home() {
   return searchBox() + '<div id="home-content"><div id="banner"></div><div class="dots" aria-label="العروض">' +
     banners.map((_,i) => '<button data-slide="' + i + '" aria-label="عرض ' + (i+1) + '"></button>').join('') +
     '</div><div class="strip">توصيل لكل المحافظات</div><div class="row"><h2>الأقسام</h2><a href="#categories">عرض الكل</a></div>' +
-    '<div class="chips">' + categories.map(([id,name]) => '<a class="button secondary" href="#shop/' + id + '">' + name + '</a>').join('') +
-    '</div><h2>عروض مميزة</h2>' + cards(products.filter(p => p.old)) + '</div><div id="results" hidden></div>';
+    '<div class="chips">' + categories.map(([id,name]) => '<a class="button secondary" href="#shop/' + id + '">' + escape(name) + '</a>').join('') +
+    '</div><h2>عروض مميزة</h2>' + cards(products.filter(p => p.old || p.category === 'offers')) + '</div><div id="results" hidden></div>';
 }
 function shop(id) {
   const category = categories.find(row => row[0] === id);
-  return '<h1>' + (category?.[1] || 'كل المنتجات') + '</h1>' + searchBox() +
+  return '<h1>' + escape(category?.[1] || 'كل المنتجات') + '</h1>' + searchBox() +
     '<label>ترتيب المنتجات<select id="sort"><option value="">الافتراضي</option><option value="low">السعر من الأقل</option>' +
     '<option value="high">السعر من الأعلى</option></select></label><div id="results"></div>';
 }
@@ -95,7 +97,7 @@ function updateResults() {
     results.hidden = !query;
     if (!query) return;
   }
-  const list = products.filter(p => (!param || (param === 'offers' ? p.old : p.category === param)) && p.name.includes(query));
+  const list = products.filter(p => (!param || (p.category === param || (param === 'offers' && p.old))) && p.name.includes(query));
   const sort = document.querySelector('#sort')?.value;
   if (sort) list.sort((a,b) => sort === 'low' ? a.price-b.price : b.price-a.price);
   results.innerHTML = cards(list);
@@ -104,9 +106,10 @@ function detail(id) {
   const p = products.find(item => item.id === id);
   if (!p) return '<h1>المنتج غير موجود</h1>';
   const shades = ['#a3283f','#b35470','#97594e','#c58d7a'];
-  return '<section class="narrow"><h1>' + p.name + '</h1>' + photo(p.detail || p.image,p.name,'detail') +
+  return '<section class="narrow"><h1>' + escape(p.name) + '</h1>' + photo(p.detail || p.image,p.name,'detail') +
     '<div class="row"><h2>' + money(p.price) + '</h2><button class="secondary" data-favorite="' + p.id +
     '">' + (state.favorites.includes(p.id) ? '♥ إزالة من المفضلة' : '♡ إضافة للمفضلة') + '</button></div>' +
+    (p.description ? '<p class="panel">' + escape(p.description) + '</p>' : '') +
     '<form id="add-form" data-product="' + p.id + '">' +
     (p.shades ? '<fieldset class="panel"><legend>اختاري الدرجة</legend>' + p.shades.map((shade,i) =>
       '<label><input type="radio" name="shade" value="' + shade + '" ' + (i === 0 ? 'checked' : '') +
@@ -130,7 +133,7 @@ function cart() {
   if (!state.cart.length) return '<h1>السلة</h1><p class="panel">سلتك فارغة.</p><a class="button" href="#categories">تسوّقي الآن</a>';
   const lines = state.cart.map((line,i) => {
     const p = products.find(item => item.id === line.id);
-    return '<div class="panel row">' + photo(p.image,p.name,'thumb') + '<div class="grow"><strong>' + p.name +
+    return '<div class="panel row">' + photo(p.image,p.name,'thumb') + '<div class="grow"><strong>' + escape(p.name) +
       '</strong><br>' + escape(line.shade) + '<br>' + money(p.price*line.qty) + '</div><div>' +
       '<button class="secondary" data-quantity="' + i + '/1" aria-label="زيادة الكمية">+</button> ' + format.format(line.qty) +
       ' <button class="secondary" data-quantity="' + i + '/-1" aria-label="تقليل الكمية">−</button><br>' +
@@ -176,7 +179,7 @@ function settings() {
 function account() {
   if (previewAsManager) return '<h1>حسابي</h1><div class="panel"><h2>' +
     escape(state.settings.name) + '</h2><span class="status">مدير المتجر</span></div>' +
-    '<a class="button" href="#settings">إعدادات المتجر</a> <a class="button secondary" href="#orders">إدارة الطلبات</a>';
+    '<a class="button" href="#settings">إعدادات المتجر</a> <a class="button secondary" href="#orders">إدارة الطلبات</a> <a class="button secondary" href="#manage">إدارة محتوى المتجر</a>';
   if (!state.profile) return '<h1>حسابي</h1><div class="panel"><a class="button" href="#login">تسجيل الدخول</a> ' +
     '<a class="button secondary" href="#signup">إنشاء حساب</a></div><a href="#orders">الطلبات التجريبية</a>';
   return '<h1>حسابي</h1><div class="panel"><h2>' + escape(state.profile.name) + '</h2>' +
@@ -212,7 +215,7 @@ function render(scroll = false) {
   clearInterval(timer);
   const pages = {home, categories:() => '<h1>الأقسام</h1><div class="strip">توصيل لكل المحافظات</div><br>' + categoryCards(),
     shop:() => shop(param), product:() => detail(param), cart, checkout, login:() => login(), signup:() => login(true),
-    account, profile, settings, favorites:() => '<h1>المفضلة</h1>' + cards(products.filter(p => state.favorites.includes(p.id))),
+    account, profile, settings, manage:managementPage, favorites:() => '<h1>المفضلة</h1>' + cards(products.filter(p => state.favorites.includes(p.id))),
     orders:() => orderContent(), order:() => orderContent(param)};
   view.innerHTML = Object.hasOwn(pages,path) ? pages[path]() : '<h1>الصفحة غير موجودة</h1><a href="#home">الرئيسية</a>';
   if (path === 'home') {
@@ -267,7 +270,9 @@ view.addEventListener('submit', event => {
   event.preventDefault();
   const form = event.target;
   const data = new FormData(form);
-  if (form.id === 'add-form') {
+  if (form.dataset.content) {
+    saveCatalogItem(form,data);
+  } else if (form.id === 'add-form') {
     addProduct(form.dataset.product,data.get('shade'),Number(data.get('qty')));
   } else if (form.id === 'coupon') {
     state.coupon = data.get('coupon').trim().toUpperCase() === 'BEAUTY10';
@@ -316,9 +321,7 @@ const menuSections = document.querySelector('#menu-sections');
 const menuCategories = document.querySelector('#menu-categories');
 const menuBack = document.querySelector('#menu-back');
 const menuHeading = document.querySelector('#menu-heading');
-document.querySelector('#menu-section-links').innerHTML = categories.map(([id,name]) =>
-  '<li><a href="#shop/' + id + '">' + name + '</a></li>'
-).join('');
+document.querySelector('#menu-manage').hidden = !previewAsManager;
 document.querySelector('#menu-role').textContent = previewAsManager ? 'مدير المتجر' : 'زبون';
 document.querySelector('#menu-orders').textContent = orderLabel;
 
@@ -328,6 +331,9 @@ function showMenuSections(show) {
   menuHeading.textContent = show ? 'الأقسام' : 'القائمة المختصرة';
 }
 menuCategories.addEventListener('click', () => {
+  document.querySelector('#menu-section-links').innerHTML = categories.map(([id,name]) =>
+    '<li><a href="#shop/' + id + '">' + escape(name) + '</a></li>'
+  ).join('');
   showMenuSections(true);
   quickMenu.scrollTop = 0;
   menuBack.focus();

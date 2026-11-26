@@ -21,6 +21,7 @@ const initial = {cart:[], favorites:[], orders:[], profile:null, coupon:false, s
 let state;
 try { state = {...initial, ...JSON.parse(localStorage.getItem(key))}; }
 catch { state = {...initial}; }
+let checkoutDraft = null;
 let slide = 0;
 let timer;
 let noticeTimer;
@@ -40,7 +41,7 @@ function route() {
 }
 function updateNavigation() {
   const {path} = route();
-  const tab = ({shop:'categories',product:'categories',checkout:'cart',login:'account',signup:'account',
+  const tab = ({shop:'categories',product:'categories',checkout:'cart',review:'cart',login:'account',signup:'account',
     orders:'account',manage:'account',profile:'account',settings:'account',order:'account'})[path] || path;
   document.querySelectorAll('nav a').forEach(link => {
     if (link.hash === '#' + tab) link.setAttribute('aria-current','page');
@@ -49,21 +50,30 @@ function updateNavigation() {
   const count = state.cart.reduce((total,line) => total + line.qty,0);
   document.querySelector('#count').textContent = count ? format.format(count) : '';
 }
+function productName(product) {
+  return language === 'en' && product.nameEn ? product.nameEn : product.name;
+}
+function categoryName(category) {
+  return language === 'en' && category?.[3] ? category[3] : category?.[1];
+}
 function cards(items) {
+  items = items.filter(product => !product.hidden);
   return items.length ? '<div class="grid">' + items.map(p =>
-    '<article class="card"><a href="#product/' + p.id + '">' + photo(p.image,p.name) +
-    '<strong>' + escape(p.name) + '</strong></a><span class="price">' + money(p.price) +
+    '<article class="card"><a href="#product/' + p.id + '">' + photo(p.image,productName(p)) +
+    '<strong>' + escape(productName(p)) + '</strong></a><span class="price">' + money(p.price) +
     (p.old ? '<del>' + money(p.old) + '</del>' : '') +
-    '</span>' + (p.shades?.length && availableStock(p) > 0
+    '</span>' + ((p.variants?.length || p.shades?.length) && availableStock(p) > 0
       ? '<a class="button card-action" href="#product/' + p.id + '">اختاري الدرجة</a>'
       : '<button data-add="' + p.id + '"' + (availableStock(p) === 0 ? ' disabled>نفد المخزون' : '>أضيفي للسلة') + '</button>') +
     '</article>').join('') +
     '</div>' : '<p class="panel">ماكو منتجات للعرض حالياً.</p>';
 }
 function categoryCards() {
-  return '<div class="grid categories">' + categories.map(([id,name,image]) =>
-    '<a class="card" href="#shop/' + id + '">' + photo(image || id) + '<strong>' + escape(name) + '</strong></a>'
-  ).join('') + '</div>';
+  return '<div class="grid categories">' + categories.map(category => {
+    const [id,,image] = category;
+    return
+    '<a class="card" href="#shop/' + id + '">' + photo(image || id) + '<strong>' + escape(categoryName(category)) + '</strong></a>';
+  }).join('') + '</div>';
 }
 function searchBox() {
   return '<label class="search">بحث المنتجات<input id="search" type="search" placeholder="ابحثي عن منتج…"></label>';
@@ -80,7 +90,7 @@ function updateBanner() {
     button.setAttribute('aria-pressed',String(i === slide)));
 }
 function home() {
-  const recent = [...products].reverse().slice(0,6);
+  const recent = products.filter(p => !p.hidden).reverse().slice(0,6);
   return searchBox() + '<div id="home-content"><div id="banner"></div><div class="dots" aria-label="العروض">' +
     banners.map((_,i) => '<button data-slide="' + i + '" aria-label="عرض ' + (i+1) + '"></button>').join('') +
     '</div><div class="row"><h2>الأقسام</h2><a href="#categories">عرض الكل</a></div>' + categoryCards() +
@@ -94,8 +104,16 @@ function shop(id) {
     ...products.filter(p => p.category === id).map(productType).filter(Boolean)])];
   const filter = types.length ? '<label>نوع المنتج<select id="type-filter"><option value="">كل الأنواع</option>' +
     types.map(type => '<option value="' + escape(type) + '">' + escape(type) + '</option>').join('') + '</select></label>' : '';
-  return '<h1>' + escape(category?.[1] || 'كل المنتجات') + '</h1>' + searchBox() +
-    '<div class="admin-filters">' + filter + '<label>ترتيب المنتجات<select id="sort"><option value="">الافتراضي</option>' +
+  const candidates = products.filter(p => !p.hidden && (!id || p.category === id || (id === 'offers' && p.old)));
+  const options = values => [...new Set(values.filter(Boolean))].map(value =>
+    '<option value="' + escape(value) + '">' + escape(value) + '</option>').join('');
+  const brands = options(candidates.map(p => p.brand));
+  const shades = options(candidates.flatMap(p => p.variants?.length ? p.variants.map(v => language === 'en' && v.nameEn ? v.nameEn : v.name) : p.shades || []));
+  const filters = (brands ? '<label>الماركة<select id="brand-filter"><option value="">كل الماركات</option>' + brands + '</select></label>' : '') +
+    (shades ? '<label>الدرجة<select id="shade-filter"><option value="">كل الدرجات</option>' + shades + '</select></label>' : '') +
+    '<label>أقل سعر<input id="price-min" type="number" min="0"></label><label>أعلى سعر<input id="price-max" type="number" min="0"></label>';
+  return '<h1>' + escape(categoryName(category) || 'كل المنتجات') + '</h1>' + searchBox() +
+    '<div class="admin-filters">' + filter + filters + '<label>ترتيب المنتجات<select id="sort"><option value="">الافتراضي</option>' +
     '<option value="low">السعر من الأقل</option><option value="high">السعر من الأعلى</option></select></label></div><div id="results"></div>';
 }
 function updateResults() {
@@ -109,8 +127,14 @@ function updateResults() {
     results.hidden = !query;
     if (!query) return;
   }
-  const list = products.filter(p => (!param || (p.category === param || (param === 'offers' && p.old))) && (!type || productType(p) === type) &&
-    [p.name,translate(p.name)].some(name => name.toLowerCase().includes(query)));
+  const value = id => document.querySelector('#' + id)?.value || '';
+  const brand = value('brand-filter'), shade = value('shade-filter');
+  const min = value('price-min'), max = value('price-max');
+  const list = products.filter(p => !p.hidden && (!brand || p.brand === brand) &&
+    (!min || p.price >= Number(min)) && (!max || p.price <= Number(max)) &&
+    (!shade || (p.variants?.length ? p.variants.some(v => (language === 'en' && v.nameEn ? v.nameEn : v.name) === shade) : p.shades?.includes(shade))) &&
+    (!param || (p.category === param || (param === 'offers' && p.old))) && (!type || productType(p) === type) &&
+    [p.name,productName(p),translate(p.name)].some(name => name.toLowerCase().includes(query)));
   const sort = document.querySelector('#sort')?.value;
   if (sort) list.sort((a,b) => sort === 'low' ? a.price-b.price : b.price-a.price);
   results.innerHTML = cards(list);
@@ -118,22 +142,33 @@ function updateResults() {
 }
 function detail(id) {
   const p = products.find(item => item.id === id);
-  if (!p) return '<h1>المنتج غير موجود</h1>';
-  const shades = ['#a3283f','#b35470','#97594e','#c58d7a'];
+  if (!p || p.hidden) return '<h1>المنتج غير موجود</h1>';
+  const colors = ['#a3283f','#b35470','#97594e','#c58d7a'];
+  const shades = p.variants?.length ? p.variants : (p.shades || []).map((name,i) => ({name,color:colors[i]}));
+  const firstAvailable = shades.findIndex(v => availableStock(p,v.name) > 0);
+  const description = language === 'en' && p.descriptionEn ? p.descriptionEn : p.description;
+  const specs = [['الماركة',p.brand],['الحجم',p.size],['نوع البشرة',p.skin],['درجة التغطية',p.coverage],['طريقة الاستخدام',p.usage]]
+    .filter(([,value]) => value).map(([key,value]) => '<div class="line"><strong>' + key + '</strong> · <span>' + escape(value) + '</span></div>').join('');
   const images = [...new Set([p.detail || p.image,p.image,...(p.gallery || [])])];
   const gallery = '<div class="product-photos" id="product-photos" tabindex="0" aria-label="صور المنتج">' +
     images.map(src => photo(src,p.name,'detail')).join('') + '</div>' +
     (images.length > 1 ? '<div class="row gallery-controls"><button type="button" class="secondary" data-photo-step="-1" aria-label="الصورة السابقة">‹</button>' +
       '<button type="button" class="secondary" data-photo-step="1" aria-label="الصورة التالية">›</button></div>' : '');
-  return '<section class="narrow"><h1>' + escape(p.name) + '</h1>' + gallery +
+  return '<section class="narrow"><a class="button secondary" href="#shop/' + p.category + '">رجوع</a><h1>' + escape(productName(p)) + '</h1>' + gallery +
     '<div class="row"><h2>' + money(p.price) + '</h2><button class="secondary" data-favorite="' + p.id +
     '">' + (state.favorites.includes(p.id) ? '♥ إزالة من المفضلة' : '♡ إضافة للمفضلة') + '</button></div>' +
     (p.stock == null ? '' : '<p>المتوفر ' + format.format(availableStock(p)) + '</p>') +
-    (p.description ? '<p class="panel">' + escape(p.description) + '</p>' : '') +
+    (description ? '<p class="panel">' + escape(description) + '</p>' : '') + (specs ? '<div class="panel">' + specs + '</div>' : '') +
     '<form id="add-form" data-product="' + p.id + '">' +
-    (p.shades ? '<fieldset class="panel"><legend>اختاري الدرجة</legend>' + p.shades.map((shade,i) =>
-      '<label><input type="radio" name="shade" value="' + shade + '" ' + (i === 0 ? 'checked' : '') +
-      '><span class="swatch" style="background:' + shades[i] + '"></span>' + shade + '</label>').join('') + '</fieldset>' : '') +
+    (shades.length ? '<fieldset class="panel"><legend>اختاري الدرجة</legend>' + shades.map((shade,i) => {
+      const stock = availableStock(p,shade.name);
+      return '<label><input type="radio" name="shade" required value="' + escape(shade.name) + '"' +
+        (i === firstAvailable ? ' checked' : '') + (stock === 0 ? ' disabled' : '') +
+        '><span class="swatch" style="background:' + shade.color + '"></span><span>' +
+        escape(language === 'en' && shade.nameEn ? shade.nameEn : shade.name) +
+        '</span>' + (stock === 0 ? ' · <small>نفد المخزون</small>' : p.variants?.length ?
+          ' · <small>المتوفر ' + format.format(stock) + '</small>' : '') + '</label>';
+    }).join('') + '</fieldset>' : '') +
     '<label>الكمية<input name="qty" type="number" min="1" max="99" value="1" required></label>' +
     '<div class="purchase-bar"><button class="full"' + (availableStock(p) === 0 ? ' disabled>نفد المخزون' : '>أضيفي للسلة') + '</button></div></form></section>';
 }
@@ -153,13 +188,13 @@ function cart() {
   if (!state.cart.length) return '<h1>السلة</h1><p class="panel">سلتك فارغة.</p><a class="button" href="#categories">تسوّقي الآن</a>';
   const lines = state.cart.map((line,i) => {
     const p = products.find(item => item.id === line.id);
-    return '<div class="panel row">' + photo(p.image,p.name,'thumb') + '<div class="grow"><strong>' + escape(p.name) +
+    return '<div class="panel row">' + photo(p.image,p.name,'thumb') + '<div class="grow"><strong>' + escape(productName(p)) +
       '</strong><br>' + escape(line.shade) + '<br>' + money(p.price*line.qty) + '</div><div>' +
       '<button class="secondary" data-quantity="' + i + '/1" aria-label="زيادة الكمية">+</button> ' + format.format(line.qty) +
       ' <button class="secondary" data-quantity="' + i + '/-1" aria-label="تقليل الكمية">−</button><br>' +
       '<button class="secondary" data-remove="' + i + '">حذف</button></div></div>';
   }).join('');
-  return '<h1>السلة</h1>' + lines + '<form class="panel" id="coupon"><label>رمز الخصم<input name="coupon" placeholder="BEAUTY10" ' +
+  return '<a class="button secondary" href="#home">رجوع</a><h1>السلة</h1>' + lines + '<form class="panel" id="coupon"><label>رمز الخصم<input name="coupon" placeholder="BEAUTY10" ' +
     (state.coupon ? 'value="BEAUTY10"' : '') + '></label><button>تطبيق</button></form>' + summary() +
     '<div class="purchase-bar row"><div><strong>الإجمالي</strong><br>' + money(totals().total) +
     '</div><a class="button" href="#checkout">إكمال الطلب</a></div>';
@@ -167,17 +202,35 @@ function cart() {
 const provinces = ['بغداد','البصرة','نينوى','أربيل','السليمانية','دهوك','كركوك','الأنبار','صلاح الدين','ديالى','واسط','بابل','كربلاء','النجف','القادسية','المثنى','ذي قار','ميسان','حلبجة'];
 function checkout() {
   if (!state.cart.length) return cart();
-  return '<section class="narrow"><h1>إتمام الطلب</h1><form id="checkout"><div class="panel"><h2>بيانات الاستلام</h2>' +
+  const draft = checkoutDraft || {};
+  return '<section class="narrow"><a class="button secondary" href="#cart">رجوع</a><h1>إتمام الطلب</h1><form id="checkout"><div class="panel"><h2>بيانات الاستلام</h2>' +
     '<p class="muted">طلب تجريبي. استخدمي بيانات وهمية.</p>' +
-    '<label>الاسم الكامل<input name="name" required maxlength="80"></label>' +
-    '<label>رقم الهاتف<input name="phone" type="tel" inputmode="tel" pattern="[+0-9٠-٩ ]{8,16}" required></label>' +
+    '<label>الاسم الكامل<input name="name" required maxlength="80" value="' + escape(draft.name || '') + '"></label>' +
+    '<label>رقم الهاتف<input name="phone" type="tel" inputmode="tel" pattern="[+0-9٠-٩ ]{8,16}" value="' + escape(draft.phone || '') + '" required></label>' +
     '<label>المحافظة<select name="province" required><option value="">اختاري المحافظة</option>' +
-    provinces.map(p => '<option value="' + escape(p) + '">' + p + '</option>').join('') + '</select></label>' +
+    provinces.map(p => '<option value="' + escape(p) + '"' + (draft.province === p ? ' selected' : '') + '>' + p + '</option>').join('') + '</select></label>' +
     '<label>المنطقة والعنوان<textarea name="address" required maxlength="200">' +
-    escape(state.profile?.address || '') + '</textarea></label></div>' +
+    escape(draft.address ?? state.profile?.address ?? '') + '</textarea></label></div>' +
     '<div class="panel"><h2>طريقة الدفع</h2>الدفع عند الاستلام</div>' +
     (state.settings.contact ? '<p><span>تواصل المتجر:</span> ' + escape(state.settings.contact) + '</p>' : '') + summary() +
-    '<button class="full">تأكيد الطلب</button></form></section>';
+    '<div class="chips"><button>مراجعة الطلب</button><button type="button" class="secondary" data-cancel-checkout>إلغاء</button></div></form></section>';
+}
+function reviewOrder() {
+  if (!checkoutDraft || !state.cart.length) return checkout();
+  const draft = checkoutDraft;
+  const lines = state.cart.map(line => {
+    const product = products.find(p => p.id === line.id);
+    const shade = product.variants?.find(v => v.name === line.shade);
+    return '<div class="row line"><span>' + escape(productName(product)) +
+      (line.shade ? ' · ' + escape(language === 'en' && shade?.nameEn ? shade.nameEn : line.shade) : '') +
+      ' × ' + format.format(line.qty) + '</span><b>' + money(product.price * line.qty) + '</b></div>';
+  }).join('');
+  return '<section class="narrow"><a class="button secondary" href="#checkout">رجوع</a><h1>مراجعة الطلب</h1>' +
+    '<div class="panel"><h2>محتويات الطلب</h2>' + lines + '<a href="#cart" class="button secondary">تعديل السلة</a></div>' +
+    '<div class="panel"><h2>بيانات الاستلام</h2><p>' + escape(draft.name) + '<br><bdi>' + escape(draft.phone) +
+    '</bdi><br>' + escape(translate(draft.province)) + ' · ' + escape(draft.address) +
+    '</p><a href="#checkout" class="button secondary">تعديل العنوان</a></div>' + summary() +
+    '<form id="confirm-order" class="chips"><button>تأكيد الطلب</button><button type="button" class="secondary" data-cancel-checkout>إلغاء</button></form></section>';
 }
 function login(signup = false) {
   const title = signup ? 'إنشاء حساب تجريبي' : 'تسجيل الدخول';
@@ -197,7 +250,7 @@ function settings() {
     '<label>معلومات التواصل<input name="contact" value="' + escape(contact) + '" maxlength="120"></label>' +
     '<label>رسوم التوصيل بالدينار العراقي<input name="delivery" type="number" min="0" max="1000000" value="' +
     delivery + '" required></label><label>لون خلفية المتجر<input name="background" type="color" value="' +
-    background + '"></label><button>حفظ</button></form>';
+    background + '"></label><div class="chips"><button>حفظ</button><a class="button secondary" href="#manage">إلغاء</a></div></form>';
 }
 function account() {
   if (previewAsManager) return '<h1>حسابي</h1><div class="panel"><h2>' +
@@ -227,7 +280,7 @@ function orderContent(id) {
   const editor = previewAsManager ? '<form class="panel" id="order-status" data-order="' + escape(id) +
     '"><label>حالة الطلب<select name="status">' + Object.entries(orderStatuses).map(([value,label]) =>
       '<option value="' + value + '"' + (value === status ? ' selected' : '') + '>' + label + '</option>'
-    ).join('') + '</select></label><button>حفظ الحالة</button></form>' : '';
+    ).join('') + '</select></label><div class="chips"><button>حفظ الحالة</button><a class="button secondary" href="#orders">إلغاء</a></div></form>' : '';
   const items = order.items?.length ? '<div class="panel"><h2>محتويات الطلب</h2>' + order.items.map(item =>
     '<div class="row line"><span>' + escape(item.name) + (item.shade ? ' · ' + escape(item.shade) : '') +
     ' × ' + format.format(item.qty) + '</span><span>' + money(item.price * item.qty) + '</span></div>'
@@ -245,8 +298,8 @@ function render(scroll = false) {
   const {path,param} = route();
   clearInterval(timer);
   const pages = {home, categories:() => '<h1>الأقسام</h1><div class="strip">توصيل لكل المحافظات</div><br>' + categoryCards(),
-    shop:() => shop(param), product:() => detail(param), cart, checkout, login:() => login(), signup:() => login(true),
-    account, profile, settings, manage:() => managementPage(param), favorites:() => '<h1>المفضلة</h1>' + cards(products.filter(p => state.favorites.includes(p.id))),
+    shop:() => shop(param), product:() => detail(param), cart, checkout, review:reviewOrder, login:() => login(), signup:() => login(true),
+    account, profile, settings, manage:() => managementPage(param), favorites:() => '<h1>المفضلة</h1>' + cards(products.filter(p => !p.hidden && state.favorites.includes(p.id))),
     orders:() => orderContent(), order:() => orderContent(param)};
   view.innerHTML = Object.hasOwn(pages,path) ? pages[path]() : '<h1>الصفحة غير موجودة</h1><a href="#home">الرئيسية</a>';
   if (path === 'home') {
@@ -267,20 +320,30 @@ function render(scroll = false) {
   updateNavigation();
   if (scroll) window.scrollTo(0,0);
 }
-function soldQuantity(id) {
+function soldQuantity(id, shade) {
   return state.orders.reduce((total,order) => order.status === 'cancelled' ? total : total +
-    (order.items || []).reduce((sum,item) => sum + (item.id === id ? item.qty : 0),0),0);
+    (order.items || []).reduce((sum,item) => sum + (item.id === id && (shade === undefined || item.shade === shade) ? item.qty : 0),0),0);
 }
-function availableStock(product) {
+function availableStock(product, shade) {
+  if (product.variants?.length) {
+    if (shade === undefined) return product.variants.reduce((sum,v) => sum + availableStock(product,v.name),0);
+    const variant = product.variants.find(v => v.name === shade);
+    return variant ? Math.max(0,variant.stock - soldQuantity(product.id,shade)) : 0;
+  }
   return product.stock == null ? Infinity : Math.max(0,product.stock - soldQuantity(product.id));
 }
-function cartQuantity(id) {
-  return state.cart.reduce((count,line) => count + (line.id === id ? line.qty : 0),0);
+function cartQuantity(id, shade) {
+  return state.cart.reduce((count,line) => count + (line.id === id && (shade === undefined || line.shade === shade) ? line.qty : 0),0);
+}
+function stockScope(product,line) {
+  return product.variants?.length ? line.shade : undefined;
 }
 function addProduct(id, shade, qty) {
   const p = products.find(product => product.id === id);
-  if (cartQuantity(id) + qty > availableStock(p)) { notify('الكمية المطلوبة تتجاوز المخزون.'); return; }
-  const chosen = shade || p.shades?.[0] || '';
+  if (!p || p.hidden) return;
+  const chosen = shade || p.variants?.[0]?.name || p.shades?.[0] || '';
+  const scope = stockScope(p,{shade:chosen});
+  if (cartQuantity(id,scope) + qty > availableStock(p,scope)) { notify('الكمية المطلوبة تتجاوز المخزون.'); return; }
   const line = state.cart.find(item => item.id === id && item.shade === chosen);
   if (line) line.qty = Math.min(99,line.qty + qty);
   else state.cart.push({id,shade:chosen,qty});
@@ -288,12 +351,12 @@ function addProduct(id, shade, qty) {
   notify('تمت إضافة المنتج للسلة');
 }
 view.addEventListener('input', event => {
-  if (['admin-search','admin-category-filter'].includes(event.target.id)) {
+  if (['admin-search','admin-category-filter','admin-alert'].includes(event.target.id)) {
     document.querySelector('#admin-list').innerHTML = catalogRows('products',
-      document.querySelector('#admin-search').value.trim(),document.querySelector('#admin-category-filter').value);
+      document.querySelector('#admin-search').value.trim(),document.querySelector('#admin-category-filter').value,document.querySelector('#admin-alert').value);
     localize(document.querySelector('#admin-list'));
   }
-  if (['search','sort','type-filter'].includes(event.target.id)) updateResults();
+  if (['search','sort','type-filter','brand-filter','shade-filter','price-min','price-max'].includes(event.target.id)) updateResults();
 });
 view.addEventListener('click', event => {
   const button = event.target.closest('button');
@@ -301,6 +364,7 @@ view.addEventListener('click', event => {
   if (button.hasAttribute('data-scan-barcode')) { scanProductBarcode(button.form); return; }
   if (button.hasAttribute('data-stop-barcode')) { stopProductBarcodeScan?.(); return; }
   const data = button.dataset;
+  if (button.hasAttribute('data-cancel-checkout')) { checkoutDraft = null; location.hash = 'cart'; return; }
   if (data.photoStep) {
     const gallery = document.querySelector('#product-photos');
     gallery.scrollBy({left:Number(data.photoStep) * gallery.clientWidth * (language === 'ar' ? -1 : 1),behavior:'auto'});
@@ -315,7 +379,9 @@ view.addEventListener('click', event => {
   } else if (data.quantity) {
     const [index,delta] = data.quantity.split('/').map(Number);
     const id = state.cart[index].id;
-    if (delta > 0 && cartQuantity(id) + delta > availableStock(products.find(p => p.id === id))) {
+    const product = products.find(p => p.id === id);
+    const scope = stockScope(product,state.cart[index]);
+    if (delta > 0 && (product.hidden || cartQuantity(id,scope) + delta > availableStock(product,scope))) {
       notify('الكمية المطلوبة تتجاوز المخزون.');
       return;
     }
@@ -343,20 +409,30 @@ view.addEventListener('submit', event => {
     render();
     notify(state.coupon ? 'تم تطبيق خصم 10%' : 'رمز الخصم غير صالح');
   } else if (form.id === 'checkout' && state.cart.length) {
+    checkoutDraft = Object.fromEntries(['name','phone','province','address'].map(field => [field,data.get(field).trim()]));
+    if (!checkoutDraft.name || !checkoutDraft.address) { notify('أكمل الاسم والعنوان.'); return; }
+    location.hash = 'review';
+    if (route().path === 'review') render(true);
+  } else if (form.id === 'confirm-order' && checkoutDraft && state.cart.length) {
     const items = state.cart.map(line => {
       const product = products.find(p => p.id === line.id);
       return {...line,name:product.name,price:product.price};
     });
-    if (items.some(item => cartQuantity(item.id) > availableStock(products.find(p => p.id === item.id)))) {
+    if (items.some(item => {
+      const product = products.find(p => p.id === item.id);
+      const shade = stockScope(product,item);
+      return product.hidden || cartQuantity(item.id,shade) > availableStock(product,shade);
+    })) {
       notify('المخزون تغيّر. عدّل الكميات بالسلة.');
       return;
     }
-    const order = {id:String(Date.now()), province:data.get('province'), total:totals().total, items};
+    const order = {id:String(Date.now()), province:checkoutDraft.province, total:totals().total, items};
     const next = {...state,orders:[order,...state.orders],cart:[],coupon:false};
     try { localStorage.setItem(key,JSON.stringify(next)); }
     catch { notify('تعذّر حفظ الطلب في المتصفح.'); return; }
     state = next;
     updateNavigation();
+    checkoutDraft = null;
     location.hash = 'order/' + order.id;
   } else if (form.id === 'login' || form.id === 'signup') {
     state.profile = {name:data.get('name')?.trim() || 'متسوّقة لمسة بيوتي',identifier:data.get('identifier').trim()};
@@ -374,8 +450,12 @@ view.addEventListener('submit', event => {
     const status = data.get('status');
     if (!order || !Object.hasOwn(orderStatuses,status)) return;
     if (order.status === 'cancelled' && status !== 'cancelled' && (order.items || []).some(line =>
-      order.items.reduce((qty,item) => qty + (item.id === line.id ? item.qty : 0),0) >
-        availableStock(products.find(product => product.id === line.id))
+      {
+        const product = products.find(product => product.id === line.id);
+        const shade = stockScope(product,line);
+        return order.items.reduce((qty,item) => qty + (item.id === line.id && (shade === undefined || item.shade === shade) ? item.qty : 0),0) >
+          availableStock(product,shade);
+      }
     )) {
       notify('المخزون الحالي ما يكفي لإعادة تفعيل الطلب.');
       return;
@@ -412,8 +492,8 @@ function showMenuSections(show) {
   menuHeading.textContent = translate(show ? 'الأقسام' : 'القائمة المختصرة');
 }
 menuCategories.addEventListener('click', () => {
-  document.querySelector('#menu-section-links').innerHTML = categories.map(([id,name]) =>
-    '<li><a href="#shop/' + id + '">' + escape(name) + '</a></li>'
+  document.querySelector('#menu-section-links').innerHTML = categories.map(category =>
+    '<li><a href="#shop/' + category[0] + '">' + escape(categoryName(category)) + '</a></li>'
   ).join('');
   localize(menuSections);
   showMenuSections(true);

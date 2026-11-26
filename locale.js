@@ -184,6 +184,33 @@ const english = Object.fromEntries(`
 العنصر غير موجود.|Item not found.
 تعذّر حفظ الترتيب.|Could not save the order.
 تعذّر حفظ الطلب في المتصفح.|Could not save the order in this browser.
+بحث بالاسم أو الباركود|Search by name or barcode
+تنبيهات المنتجات|Product alerts
+مخزون قليل|Low stock
+تنبيه الصلاحية|Expiry alert
+منتهي الصلاحية|Expired
+قريب من انتهاء الصلاحية|Expiring soon
+مخفي|Hidden
+ظاهر|Visible
+الماركة|Brand
+الحجم|Size
+نوع البشرة|Skin type
+درجة التغطية|Coverage
+طريقة الاستخدام|How to use
+إخفاء المنتج من المتجر|Hide product from store
+درجات الألوان ومخزونها|Shades and stock
+كل سطر درجة واحدة بصيغة الاسم | اللون HEX | الكمية | الاسم بالإنجليزية (اختياري). عند إدخال درجات يُحسب المخزون منها.|One shade per line: name, HEX color, quantity, and optional English name, separated by vertical bars. Stock is calculated from the shades.
+الاسم بالإنجليزية|English name
+الوصف بالإنجليزية|English description
+كل الماركات|All brands
+الدرجة|Shade
+كل الدرجات|All shades
+أقل سعر|Minimum price
+أعلى سعر|Maximum price
+مراجعة الطلب|Review order
+تعديل السلة|Edit cart
+تعديل العنوان|Edit address
+أكمل الاسم والعنوان.|Enter a name and address.
 الباركود|Barcode
 مسح الباركود بالكاميرا|Scan barcode with camera
 إغلاق الكاميرا|Close camera
@@ -219,7 +246,7 @@ const english = Object.fromEntries(`
 ذي قار|Dhi Qar
 ميسان|Maysan
 حلبجة|Halabja
-`.trim().split('\n').map(row => row.split('|')));
+`.trim().split('\n').map(row => [row.slice(0,row.lastIndexOf('|')),row.slice(row.lastIndexOf('|') + 1)]));
 
 let language = 'ar';
 try { if (localStorage.getItem('lamsa-language') === 'en') language = 'en'; }

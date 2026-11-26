@@ -18,6 +18,8 @@ function managementPage(param = '') {
   const [kind, edit] = param.split(':');
   if (Object.hasOwn(managementLabels,kind)) return catalogManagement(kind,edit);
   const pending = state.orders.filter(order => !['delivered','cancelled'].includes(order.status)).length;
+  const low = products.filter(p => productAlerts(p).includes('low')).length;
+  const expiry = products.filter(p => productAlerts(p).includes('expiry')).length;
   const tiles = [
     ['manage/categories','الأقسام',categories.length + ' قسم'],
     ['manage/products','المنتجات',products.length + ' منتج'],
@@ -30,7 +32,10 @@ function managementPage(param = '') {
   preview.hash = 'home';
   return `<section class="admin-dashboard"><div class="row admin-heading"><h1>لوحة إدارة ${escape(state.settings.name)}</h1>
     <a class="button secondary" href="${escape(preview.href)}" target="_blank" rel="noopener">معاينة المتجر</a></div>
-    <h2>نظرة عامة</h2><div class="admin-grid">${tiles.map(([path,title,summary]) =>
+    <h2>نظرة عامة</h2><div class="chips">
+    <a class="button secondary" href="#manage/products:low"><span>مخزون قليل</span> · ${low}</a>
+    <a class="button secondary" href="#manage/products:expiry"><span>تنبيه الصلاحية</span> · ${expiry}</a>
+    </div><div class="admin-grid">${tiles.map(([path,title,summary]) =>
       `<a class="panel admin-tile" href="#${path}"><strong>${title}</strong><span>${summary}</span></a>`
     ).join('')}</div><p class="muted">البيانات التجريبية محفوظة في هذا المتصفح.</p></section>`;
 }
@@ -47,31 +52,40 @@ function catalogManagement(kind, edit) {
   const item = edit === undefined || edit === 'new' ? undefined : list[index];
   const base = '#manage/' + kind;
   const heading = `<a class="button secondary" href="#manage">‹ لوحة الإدارة</a><h1>${managementLabels[kind]}</h1>`;
-  if (edit !== undefined) {
+  const alert = kind === 'products' && ['low','expiry'].includes(edit) ? edit : '';
+  if (edit !== undefined && !alert) {
     if (edit !== 'new' && !item) return heading + '<p>العنصر غير موجود.</p>';
-    return heading + catalogForm(kind,item,index);
+    return heading + '<a class="button secondary" href="' + base + '">رجوع</a>' + catalogForm(kind,item,index);
   }
-  const filter = kind === 'products' ? `<div class="admin-filters"><label>بحث المنتج<input id="admin-search" type="search"></label>
-    <label>القسم<select id="admin-category-filter">${categoryOptions('', '<option value="">كل الأقسام</option>')}</select></label></div>` : '';
+  const filter = kind === 'products' ? `<div class="admin-filters"><label>بحث بالاسم أو الباركود<input id="admin-search" type="search"></label>
+    <label>القسم<select id="admin-category-filter">${categoryOptions('', '<option value="">كل الأقسام</option>')}</select></label>
+    <label>تنبيهات المنتجات<select id="admin-alert"><option value="">كل المنتجات</option>
+    <option value="low"${alert === 'low' ? ' selected' : ''}>مخزون قليل</option>
+    <option value="expiry"${alert === 'expiry' ? ' selected' : ''}>تنبيه الصلاحية</option></select></label></div>` : '';
   return heading + `<a class="button" href="${base}:new">إضافة ${{categories:'قسم',products:'منتج',banners:'إعلان'}[kind]}</a>` + filter +
-    '<div id="admin-list">' + catalogRows(kind) + '</div>';
+    '<div id="admin-list">' + catalogRows(kind,'','',alert) + '</div>';
 }
 
-function catalogRows(kind, query = '', category = '') {
+function catalogRows(kind, query = '', category = '', alert = '') {
   const list = catalogLists[kind];
   const rows = list.map((item,index) => {
     const isCategory = kind === 'categories';
     const id = isCategory ? item[0] : item.id ?? index;
     const name = isCategory ? item[1] : item.name ?? item.title;
-    if (!name.includes(query) || (category && item.category !== category)) return '';
+    const terms = kind === 'products' ? [name,item.nameEn,item.barcode,translate(name)] : [name];
+    if (!terms.some(value => value?.toLowerCase().includes(query.toLowerCase())) ||
+      (category && item.category !== category) || (alert && !productAlerts(item).includes(alert))) return '';
     const image = isCategory ? item[2] || id : item.image;
-    const summary = kind === 'products' ? money(item.price) + ' · ' + (item.stock == null ? 'الكمية غير محددة' : 'الكمية ' + format.format(availableStock(item)))
+    const summary = kind === 'products' ? money(item.price) + ' · ' + (Number.isFinite(availableStock(item)) ? 'الكمية ' + format.format(availableStock(item)) : 'الكمية غير محددة')
       : kind === 'banners' ? 'الترتيب ' + format.format(index + 1) : '';
     const moves = kind === 'products' ? '' : `
       <button class="secondary" type="button" data-move="${kind}/${index}/-1" aria-label="تحريك للأعلى" ${index === 0 ? 'disabled' : ''}>↑</button>
       <button class="secondary" type="button" data-move="${kind}/${index}/1" aria-label="تحريك للأسفل" ${index === list.length - 1 ? 'disabled' : ''}>↓</button>`;
     return `<article class="panel row admin-row">${photo(image,'','thumb')}<div class="grow"><strong>${escape(name)}</strong>
-      <div class="muted">${summary}</div></div><div class="admin-actions">
+      <div class="muted">${summary}</div>
+      ${kind === 'products' ? `<small>${item.hidden ? 'مخفي' : 'ظاهر'}${item.barcode ? ' · ' + escape(item.barcode) : ''}</small>
+        ${productAlerts(item).map(alert => `<div class="muted">${alert === 'low' ? 'مخزون قليل' : expiryMessage(item)}</div>`).join('')}` : ''}
+      </div><div class="admin-actions">
       <a class="button secondary" href="#manage/${kind}:${id}">تعديل</a>${moves}</div></article>`;
   }).join('');
   return rows || '<p class="panel">ماكو عناصر للعرض.</p>';
@@ -87,7 +101,17 @@ function catalogForm(kind, item, index) {
     '<option value="">اختار القسم</option>')}</select></label>`;
   const extra = isCategory ? '' : isBanner ? `<label>نص زر الإعلان<input name="copy" maxlength="40" required value="${escape(item?.copy || '')}"></label>` :
     `<label>السعر بالدينار العراقي<input name="price" type="number" min="1" max="1000000000" value="${item?.price ?? ''}" required></label>
-    <label>الكمية المتوفرة<input name="stock" type="number" min="0" max="1000000" value="${item?.stock == null ? '' : availableStock(item)}" required></label>
+    <label>الكمية المتوفرة<input name="stock" type="number" min="0" max="1000000" value="${item?.stock == null ? '' : availableStock(item)}"></label>
+    <label>الماركة<input name="brand" maxlength="80" value="${escape(item?.brand || '')}"></label>
+    <label>الحجم<input name="size" maxlength="60" value="${escape(item?.size || '')}"></label>
+    <label>نوع البشرة<input name="skin" maxlength="80" value="${escape(item?.skin || '')}"></label>
+    <label>درجة التغطية<input name="coverage" maxlength="60" value="${escape(item?.coverage || '')}"></label>
+    <label>طريقة الاستخدام<textarea name="usage" maxlength="600">${escape(item?.usage || '')}</textarea></label>
+    <label><input type="checkbox" name="hidden"${item?.hidden ? ' checked' : ''}> إخفاء المنتج من المتجر</label>
+    <label>درجات الألوان ومخزونها<textarea name="variants" rows="5" dir="auto" placeholder="وردي | #b35470 | 8">${escape(
+      (item?.variants || []).map(v => [v.name,v.color,availableStock(item,v.name),v.nameEn || ''].join(' | ')).join('\n')
+    )}</textarea></label><p class="muted">كل سطر درجة واحدة بصيغة الاسم | اللون HEX | الكمية | الاسم بالإنجليزية (اختياري). عند إدخال درجات يُحسب المخزون منها.</p>
+    <label>الوصف بالإنجليزية<textarea name="descriptionEn" maxlength="600" dir="ltr">${escape(item?.descriptionEn || '')}</textarea></label>
     <label>نوع المنتج<input name="type" maxlength="60" value="${escape(item ? productType(item) : '')}"></label>
     <label>الباركود<input name="barcode" dir="ltr" autocomplete="off" maxlength="128" value="${escape(item?.barcode || '')}"></label>
     <button class="secondary" type="button" data-scan-barcode>مسح الباركود بالكاميرا</button>
@@ -103,6 +127,7 @@ function catalogForm(kind, item, index) {
   return `<form class="panel narrow" data-content="${kind}" data-index="${item ? index : ''}">
     <h2>${item ? 'تعديل' : 'إضافة'}</h2>
     <label>${isBanner ? 'عنوان الإعلان' : 'الاسم'}<input name="name" maxlength="80" required value="${escape(name || '')}"></label>
+    ${!isBanner ? `<label>الاسم بالإنجليزية<input name="nameEn" maxlength="80" dir="ltr" value="${escape(isCategory ? item?.[3] || '' : item?.nameEn || '')}"></label>` : ''}
     ${category}${extra}${image ? photo(image,'الصورة الحالية','thumb') : ''}
     <label>${image ? 'استبدال الصورة' : 'الصورة الرئيسية'}<input name="image" type="file" accept="${imageTypes}" ${item ? '' : 'required'}></label>
     <div class="chips"><button type="submit">حفظ</button><a class="button secondary" href="#manage/${kind}">إلغاء</a></div></form>`;
@@ -171,7 +196,7 @@ async function saveCatalogItem(form, data) {
     const id = 'custom-' + crypto.randomUUID();
     let item;
     if (isCategory) {
-      item = [previous?.[0] || id,name,image];
+      item = [previous?.[0] || id,name,image,data.get('nameEn')?.trim() || ''];
     } else if (kind === 'products') {
       const files = data.getAll('gallery').filter(file => file.size);
       if (files.length > 3) throw new Error('اختار 3 صور إضافية كحد أقصى.');
@@ -179,6 +204,23 @@ async function saveCatalogItem(form, data) {
       item = {...previous,id:previous?.id || id,name,category,image,gallery,price:Number(data.get('price')),
         stock:Number(data.get('stock')) + soldQuantity(previous?.id),description:data.get('description').trim(),
         type:data.get('type')?.trim() || '',barcode:data.get('barcode')?.trim() || '',expiry:data.get('expiry') || ''};
+      for (const field of ['nameEn','descriptionEn','brand','size','skin','coverage','usage']) item[field] = data.get(field)?.trim() || '';
+      item.hidden = data.has('hidden');
+      item.variants = parseVariants(data.get('variants'),previous?.id);
+      if (previous?.variants?.length) {
+        const reserved = new Set([
+          ...state.cart.filter(line => line.id === previous.id).map(line => line.shade),
+          ...state.orders.filter(order => order.status !== 'cancelled').flatMap(order =>
+            (order.items || []).filter(line => line.id === previous.id).map(line => line.shade))
+        ]);
+        if (item.variants.length && previous.variants.some(v => reserved.has(v.name) && !item.variants.some(next => next.name === v.name))) {
+          throw new Error('درجة مرتبطة بسلة أو طلب. خلي اسمها وحدد كميتها بصفر لإيقافها.');
+        }
+      }
+      if (!item.variants.length && data.get('stock') === '') throw new Error('حدد الكمية أو أضف درجات لها مخزون.');
+      if (item.variants.length && state.cart.some(line => line.id === item.id && availableStock(item,line.shade) < cartQuantity(item.id,line.shade))) {
+        throw new Error('كمية الدرجة أقل من الكمية الموجودة بالسلة.');
+      }
       if (file?.size) delete item.detail;
     } else {
       item = {title:name,copy,image,route:'shop/' + category};
@@ -267,4 +309,31 @@ async function scanProductBarcode(form) {
     show(error.name === 'NotAllowedError' ? 'اسمح للمتصفح باستخدام الكاميرا أو اكتب الباركود يدوياً.'
       : 'تعذّر فتح الكاميرا. تگدر تكتب الباركود يدوياً.');
   }
+}
+
+function parseVariants(value, id) {
+  const rows = (value || '').split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+  if (rows.length > 30) throw new Error('الحد الأقصى 30 درجة.');
+  const names = new Set();
+  return rows.map(row => {
+    const [name,color,quantity,nameEn = '',...extra] = row.split('|').map(part => part.trim());
+    const stock = Number(quantity);
+    if (!name || name.length > 60 || nameEn.length > 60 || !/^#[0-9a-f]{6}$/i.test(color || '') ||
+      !/^\d+$/.test(quantity || '') || stock > 1000000 || names.has(name) || extra.length) {
+      throw new Error('راجع أسماء الدرجات والألوان والكميات. كل اسم لازم يكون مختلف.');
+    }
+    names.add(name);
+    return {name,color,nameEn,stock:stock + soldQuantity(id,name)};
+  });
+}
+function expiryMessage(product) {
+  const now = new Date();
+  const today = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0,10);
+  if (!product.expiry) return '';
+  const days = (Date.parse(product.expiry) - Date.parse(today)) / 86400000;
+  return days < 0 ? 'منتهي الصلاحية' : days <= 30 ? 'قريب من انتهاء الصلاحية' : '';
+}
+function productAlerts(product) {
+  return [availableStock(product) <= 5 || product.variants?.some(v => availableStock(product,v.name) <= 5) ? 'low' : '',
+    expiryMessage(product) ? 'expiry' : ''].filter(Boolean);
 }

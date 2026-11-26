@@ -88,6 +88,14 @@ function catalogForm(kind, item, index) {
   const extra = isCategory ? '' : isBanner ? `<label>نص زر الإعلان<input name="copy" maxlength="40" required value="${escape(item?.copy || '')}"></label>` :
     `<label>السعر بالدينار العراقي<input name="price" type="number" min="1" max="1000000000" value="${item?.price ?? ''}" required></label>
     <label>الكمية المتوفرة<input name="stock" type="number" min="0" max="1000000" value="${item?.stock == null ? '' : availableStock(item)}" required></label>
+    <label>الباركود<input name="barcode" dir="ltr" autocomplete="off" maxlength="128" value="${escape(item?.barcode || '')}"></label>
+    <button class="secondary" type="button" data-scan-barcode>مسح الباركود بالكاميرا</button>
+    <p data-barcode-status role="status" class="muted" hidden></p>
+    <div data-barcode-camera hidden>
+      <video muted playsinline aria-label="معاينة كاميرا الباركود" style="width:100%;max-height:240px"></video>
+      <button class="secondary" type="button" data-stop-barcode>إغلاق الكاميرا</button>
+    </div>
+    <label>تاريخ انتهاء الصلاحية<input name="expiry" type="date" value="${escape(item?.expiry || '')}"></label>
     <label>الوصف<textarea name="description" maxlength="600">${escape(item?.description || '')}</textarea></label>
     <label>صور إضافية للمنتج <small>اختياري، حتى 3 صور</small><input type="file" name="gallery" accept="${imageTypes}" multiple></label>
     ${item?.gallery?.length ? `<small>${item.gallery.length} صور إضافية محفوظة. اختيار صور جديدة يستبدلها.</small>` : ''}`;
@@ -96,7 +104,7 @@ function catalogForm(kind, item, index) {
     <label>${isBanner ? 'عنوان الإعلان' : 'الاسم'}<input name="name" maxlength="80" required value="${escape(name || '')}"></label>
     ${category}${extra}${image ? photo(image,'الصورة الحالية','thumb') : ''}
     <label>${image ? 'استبدال الصورة' : 'الصورة الرئيسية'}<input name="image" type="file" accept="${imageTypes}" ${item ? '' : 'required'}></label>
-    <div class="chips"><button>حفظ</button><a class="button secondary" href="#manage/${kind}">إلغاء</a></div></form>`;
+    <div class="chips"><button type="submit">حفظ</button><a class="button secondary" href="#manage/${kind}">إلغاء</a></div></form>`;
 }
 
 function persistCatalog(kind, next) {
@@ -150,7 +158,7 @@ async function saveCatalogItem(form, data) {
     notify('اكتب الاسم والبيانات المطلوبة.');
     return;
   }
-  const button = form.querySelector('button');
+  const button = form.querySelector('button[type=submit]');
   if (button.disabled) return;
   button.disabled = true;
   try {
@@ -168,7 +176,8 @@ async function saveCatalogItem(form, data) {
       if (files.length > 3) throw new Error('اختار 3 صور إضافية كحد أقصى.');
       const gallery = files.length ? await Promise.all(files.map(readCatalogImage)) : previous?.gallery;
       item = {...previous,id:previous?.id || id,name,category,image,gallery,price:Number(data.get('price')),
-        stock:Number(data.get('stock')) + soldQuantity(previous?.id),description:data.get('description').trim()};
+        stock:Number(data.get('stock')) + soldQuantity(previous?.id),description:data.get('description').trim(),
+        barcode:data.get('barcode')?.trim() || '',expiry:data.get('expiry') || ''};
       if (file?.size) delete item.detail;
     } else {
       item = {title:name,copy,image,route:'shop/' + category};
@@ -185,5 +194,76 @@ async function saveCatalogItem(form, data) {
     notify(error.message || 'تعذّر الحفظ.');
   } finally {
     button.disabled = false;
+  }
+}
+
+let stopProductBarcodeScan;
+
+async function scanProductBarcode(form) {
+  if (!previewAsManager || form.dataset.content !== 'products' || stopProductBarcodeScan) return;
+  const input = form.elements.barcode;
+  const status = form.querySelector('[data-barcode-status]');
+  const camera = form.querySelector('[data-barcode-camera]');
+  const video = camera.querySelector('video');
+  const show = message => {
+    status.hidden = false;
+    status.textContent = message;
+  };
+  if (!window.BarcodeDetector || !navigator.mediaDevices?.getUserMedia) {
+    show('المسح بالكاميرا غير متاح بهالمتصفح. تگدر تكتب الباركود أو تستخدم قارئ باركود خارجي.');
+    input.focus();
+    return;
+  }
+
+  let stream;
+  let active = true;
+  let scanTimer;
+  function stop() {
+    active = false;
+    clearTimeout(scanTimer);
+    stream?.getTracks().forEach(track => track.stop());
+    video.srcObject = null;
+    camera.hidden = true;
+    status.hidden = true;
+    if (stopProductBarcodeScan === stop) stopProductBarcodeScan = undefined;
+  }
+  stopProductBarcodeScan = stop;
+
+  try {
+    camera.hidden = false;
+    show('انتظر إذن الكاميرا…');
+    const detector = new BarcodeDetector();
+    stream = await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}},audio:false});
+    if (!active || !form.isConnected) { stop(); return; }
+    video.srcObject = stream;
+    await video.play();
+    if (!active || !form.isConnected) { stop(); return; }
+    show('قرّب الباركود للكاميرا وخليه واضح.');
+    async function readFrame() {
+      if (!active || !form.isConnected) { stop(); return; }
+      try {
+        const codes = await detector.detect(video);
+        if (!active || !form.isConnected) { stop(); return; }
+        const value = codes.find(code => code.rawValue && code.rawValue.length <= input.maxLength)?.rawValue;
+        if (value) {
+          input.value = value;
+          stop();
+          show('تمت قراءة الباركود.');
+          input.focus();
+          return;
+        }
+        scanTimer = setTimeout(readFrame,180);
+      } catch {
+        if (!active) return;
+        stop();
+        show('تعذّرت قراءة الباركود. جرّب الإضاءة أو اكتبه يدوياً.');
+      }
+    }
+    await readFrame();
+  } catch (error) {
+    if (!active) return;
+    stop();
+    show(error.name === 'NotAllowedError' ? 'اسمح للمتصفح باستخدام الكاميرا أو اكتب الباركود يدوياً.'
+      : 'تعذّر فتح الكاميرا. تگدر تكتب الباركود يدوياً.');
   }
 }

@@ -270,6 +270,8 @@ view.addEventListener('input', event => {
 view.addEventListener('click', event => {
   const button = event.target.closest('button');
   if (!button) return;
+  if (button.hasAttribute('data-scan-barcode')) { scanProductBarcode(button.form); return; }
+  if (button.hasAttribute('data-stop-barcode')) { stopProductBarcodeScan?.(); return; }
   const data = button.dataset;
   if (data.move) { moveCatalogItem(data.move); return; }
   if (data.add) addProduct(data.add,'',1);
@@ -402,7 +404,9 @@ quickMenu.addEventListener('click', event => {
 quickMenu.addEventListener('close', () => {
   menuToggle.setAttribute('aria-expanded','false');
 });
+window.addEventListener('pagehide', () => stopProductBarcodeScan?.());
 window.addEventListener('hashchange', () => {
+  stopProductBarcodeScan?.();
   if (quickMenu.open) quickMenu.close();
   render(true);
 });

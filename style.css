@@ -7,3 +7,14 @@
 #quick-menu ul{list-style:none;padding:0;margin:16px 0}
 #quick-menu a{display:block;padding:12px;border-radius:10px}
 #quick-menu a:hover,#quick-menu a:focus-visible{background:var(--pink);color:var(--rose)}
+
+#quick-menu .menu-account{background:var(--pink);margin-bottom:10px}
+#menu-name{display:block;margin:4px 0;overflow-wrap:anywhere}
+#menu-name:empty{display:none}
+#menu-role{display:inline-block;margin-top:4px}
+#menu-categories,#menu-back{background:transparent;color:inherit;text-align:start;min-height:44px}
+#menu-categories{display:flex;justify-content:space-between;align-items:center;width:100%;padding:12px}
+#menu-categories:hover,#menu-back:hover{background:var(--pink);color:var(--rose)}
+#quick-menu a{min-height:44px}
+.order-list-row{flex-wrap:wrap}
+#store-brand{overflow-wrap:anywhere}

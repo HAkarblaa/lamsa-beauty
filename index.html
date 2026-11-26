@@ -10,18 +10,24 @@
 <script src="app.js" defer></script>
 </head>
 <body>
-<header><a class="brand" href="#home"><span aria-hidden="true">❀</span> لمسة بيوتي</a><button id="menu-toggle" type="button" aria-label="فتح القائمة المختصرة" aria-controls="quick-menu" aria-expanded="false">☰</button></header>
+<header><a class="brand" id="store-brand" href="#home"><span aria-hidden="true">❀</span> لمسة بيوتي</a><button id="menu-toggle" type="button" aria-label="فتح القائمة المختصرة" aria-controls="quick-menu" aria-expanded="false">☰</button></header>
 <dialog id="quick-menu" aria-labelledby="menu-heading">
   <div class="row"><h2 id="menu-heading">القائمة المختصرة</h2><form method="dialog"><button type="submit" class="secondary" aria-label="إغلاق القائمة">×</button></form></div>
-  <ul>
-    <li><a href="#home">الرئيسية</a></li>
-    <li><a href="#categories">الأقسام</a></li>
-    <li><a href="#shop/offers">العروض</a></li>
-    <li><a href="#favorites">المفضلة</a></li>
-    <li><a href="#cart">السلة</a></li>
-    <li><a href="#orders">طلباتي</a></li>
-    <li><a href="#account">حسابي</a></li>
-  </ul>
+  <div id="menu-main">
+    <ul>
+      <li><a class="menu-account" href="#account"><strong>حسابي</strong><span id="menu-name"></span><small id="menu-role" class="status"></small></a></li>
+      <li><button type="button" id="menu-categories">الأقسام <span aria-hidden="true">‹</span></button></li>
+      <li><a href="#settings">الإعدادات</a></li>
+      <li><a id="menu-orders" href="#orders">طلباتي</a></li>
+      <li><a href="#favorites">المفضلة</a></li>
+      <li><a href="#cart">السلة</a></li>
+      <li><a href="#home">الرئيسية</a></li>
+    </ul>
+  </div>
+  <div id="menu-sections" hidden>
+    <button type="button" id="menu-back"><span aria-hidden="true">›</span> رجوع</button>
+    <ul id="menu-section-links"></ul>
+  </div>
 </dialog>
 <main id="view"></main>
 <nav aria-label="التنقل الرئيسي">

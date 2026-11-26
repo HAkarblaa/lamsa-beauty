@@ -7,9 +7,15 @@ const escape = value => String(value).replace(/[&<>"']/g, char => ({
 })[char]);
 const photo = (name, alt = '', css = '') =>
   '<img class="' + css + '" src="./' + name + '.webp" alt="' + escape(alt) + '">';
-const delivery = 4000;
+const previewAsManager = new URLSearchParams(location.search).get('view') !== 'customer';
+const orderLabel = previewAsManager ? 'إدارة الطلبات' : 'طلباتي';
+const defaultSettings = {name:'لمسة بيوتي', contact:'', delivery:4000};
+const orderStatuses = {
+  confirmed:'تم تأكيد الطلب', preparing:'قيد التجهيز', shipped:'خرج للتوصيل',
+  delivered:'تم التسليم', cancelled:'ملغي'
+};
 const key = 'lamsa-demo-v1';
-const initial = {cart:[], favorites:[], orders:[], profile:null, coupon:false};
+const initial = {cart:[], favorites:[], orders:[], profile:null, coupon:false, settings:defaultSettings};
 let state;
 try { state = {...initial, ...JSON.parse(localStorage.getItem(key))}; }
 catch { state = {...initial}; }
@@ -33,7 +39,7 @@ function route() {
 function updateNavigation() {
   const {path} = route();
   const tab = ({shop:'categories',product:'categories',checkout:'cart',login:'account',signup:'account',
-    orders:'account',profile:'account',order:'account'})[path] || path;
+    orders:'account',profile:'account',settings:'account',order:'account'})[path] || path;
   document.querySelectorAll('nav a').forEach(link => {
     if (link.hash === '#' + tab) link.setAttribute('aria-current','page');
     else link.removeAttribute('aria-current');
@@ -111,12 +117,12 @@ function detail(id) {
 function totals() {
   const subtotal = state.cart.reduce((sum,line) => sum + products.find(p => p.id === line.id).price * line.qty,0);
   const discount = state.coupon ? Math.round(subtotal * 0.1) : 0;
-  return {subtotal, discount, total:subtotal + delivery - discount};
+  return {subtotal, discount, total:subtotal + state.settings.delivery - discount};
 }
 function summary() {
   const {subtotal,discount,total} = totals();
   return '<div class="panel"><div class="row line"><span>مجموع المنتجات</span><b>' + money(subtotal) +
-    '</b></div><div class="row line"><span>رسوم التوصيل</span><b>' + money(delivery) +
+    '</b></div><div class="row line"><span>رسوم التوصيل</span><b>' + money(state.settings.delivery) +
     '</b></div>' + (discount ? '<div class="row line"><span>الخصم</span><b>− ' + money(discount) + '</b></div>' : '') +
     '<div class="row"><strong>الإجمالي</strong><strong>' + money(total) + '</strong></div></div>';
 }
@@ -143,8 +149,10 @@ function checkout() {
     '<label>رقم الهاتف<input name="phone" type="tel" inputmode="tel" pattern="[+0-9٠-٩ ]{8,16}" required></label>' +
     '<label>المحافظة<select name="province" required><option value="">اختاري المحافظة</option>' +
     provinces.map(p => '<option>' + p + '</option>').join('') + '</select></label>' +
-    '<label>المنطقة والعنوان<textarea name="address" required maxlength="200"></textarea></label></div>' +
-    '<div class="panel"><h2>طريقة الدفع</h2>الدفع عند الاستلام</div>' + summary() +
+    '<label>المنطقة والعنوان<textarea name="address" required maxlength="200">' +
+    escape(state.profile?.address || '') + '</textarea></label></div>' +
+    '<div class="panel"><h2>طريقة الدفع</h2>الدفع عند الاستلام</div>' +
+    (state.settings.contact ? '<p>تواصل المتجر: ' + escape(state.settings.contact) + '</p>' : '') + summary() +
     '<button class="full">تأكيد الطلب</button></form></section>';
 }
 function login(signup = false) {
@@ -156,38 +164,55 @@ function login(signup = false) {
     '<button class="full">' + (signup ? title : 'دخول تجريبي') + '</button></form>' +
     '<a class="button secondary" href="#' + (signup ? 'login">تسجيل الدخول' : 'signup">إنشاء حساب') + '</a></section>';
 }
+function settings() {
+  if (!previewAsManager) return profile();
+  const {name,contact,delivery} = state.settings;
+  return '<h1>إعدادات المتجر</h1><form class="panel narrow" id="store-settings">' +
+    '<label>اسم المتجر<input name="name" value="' + escape(name) + '" maxlength="60" required></label>' +
+    '<label>معلومات التواصل<input name="contact" value="' + escape(contact) + '" maxlength="120"></label>' +
+    '<label>رسوم التوصيل بالدينار العراقي<input name="delivery" type="number" min="0" max="1000000" value="' +
+    delivery + '" required></label><button>حفظ</button></form>';
+}
 function account() {
+  if (previewAsManager) return '<h1>حسابي</h1><div class="panel"><h2>' +
+    escape(state.settings.name) + '</h2><span class="status">مدير المتجر</span></div>' +
+    '<a class="button" href="#settings">إعدادات المتجر</a> <a class="button secondary" href="#orders">إدارة الطلبات</a>';
   if (!state.profile) return '<h1>حسابي</h1><div class="panel"><a class="button" href="#login">تسجيل الدخول</a> ' +
     '<a class="button secondary" href="#signup">إنشاء حساب</a></div><a href="#orders">الطلبات التجريبية</a>';
   return '<h1>حسابي</h1><div class="panel"><h2>' + escape(state.profile.name) + '</h2>' +
-    escape(state.profile.identifier) + '</div><div class="panel"><a class="line row" href="#orders">طلباتي <span>‹</span></a>' +
+    escape(state.profile.identifier || '') + '</div><div class="panel"><a class="line row" href="#orders">طلباتي <span>‹</span></a>' +
     '<a class="line row" href="#favorites">المفضلة <span>‹</span></a><a class="line row" href="#profile">تعديل الحساب والعنوان <span>‹</span></a></div>' +
     '<button class="secondary" data-logout>تسجيل الخروج</button>';
 }
 function profile() {
-  if (!state.profile) return login();
   return '<h1>تعديل الحساب والعنوان</h1><form class="panel narrow" id="profile">' +
-    '<label>الاسم<input name="name" required maxlength="80" value="' + escape(state.profile.name) + '"></label>' +
-    '<label>العنوان المفضل<textarea name="address" maxlength="200">' + escape(state.profile.address || '') +
+    '<label>الاسم<input name="name" required maxlength="80" value="' + escape(state.profile?.name || '') + '"></label>' +
+    '<label>العنوان المفضل<textarea name="address" maxlength="200">' + escape(state.profile?.address || '') +
     '</textarea></label><button>حفظ</button></form>';
 }
 function orderContent(id) {
-  if (!id) return '<h1>طلباتي</h1>' + (state.orders.length ? state.orders.map(order =>
-    '<a class="panel row" href="#order/' + order.id + '"><span>طلب #' + order.id + '</span><span>' +
-    money(order.total) + '</span><span class="status">تم تأكيد الطلب</span></a>').join('') : '<p>ماكو طلبات حالياً.</p>');
+  if (!id) return '<h1>' + orderLabel + '</h1>' + (state.orders.length ? state.orders.map(order =>
+    '<a class="panel row order-list-row" href="#order/' + escape(order.id) + '"><span>طلب <bdi>#' + escape(order.id) +
+    '</bdi></span><span>' + money(order.total) + '</span><span class="status">' +
+    orderStatuses[order.status || 'confirmed'] + '</span></a>').join('') : '<p>ماكو طلبات حالياً.</p>');
   const order = state.orders.find(item => item.id === id);
   if (!order) return '<h1>الطلب غير موجود</h1>';
-  return '<h1>تم تأكيد الطلب</h1><div class="panel"><p>رقم الطلب <b>#' + order.id + '</b></p>' +
+  const status = order.status || 'confirmed';
+  const editor = previewAsManager ? '<form class="panel" id="order-status" data-order="' + escape(id) +
+    '"><label>حالة الطلب<select name="status">' + Object.entries(orderStatuses).map(([value,label]) =>
+      '<option value="' + value + '"' + (value === status ? ' selected' : '') + '>' + label + '</option>'
+    ).join('') + '</select></label><button>حفظ الحالة</button></form>' : '';
+  return '<h1>' + orderStatuses[status] + '</h1><div class="panel"><p>رقم الطلب <bdi>#' + escape(order.id) + '</bdi></p>' +
     '<p>المحافظة ' + escape(order.province) + '</p><p>الإجمالي ' + money(order.total) +
-    '</p><p>الدفع عند الاستلام</p><p class="muted">تم حفظ تجربة الطلب على هذا الجهاز.</p></div>' +
-    '<a class="button" href="#orders">عرض طلباتي</a>';
+    '</p><p>الدفع عند الاستلام</p><p class="muted">طلب تجريبي محفوظ على هذا الجهاز.</p></div>' +
+    editor + '<a class="button" href="#orders">' + orderLabel + '</a>';
 }
 function render(scroll = false) {
   const {path,param} = route();
   clearInterval(timer);
   const pages = {home, categories:() => '<h1>الأقسام</h1><div class="strip">توصيل لكل المحافظات</div><br>' + categoryCards(),
     shop:() => shop(param), product:() => detail(param), cart, checkout, login:() => login(), signup:() => login(true),
-    account, profile, favorites:() => '<h1>المفضلة</h1>' + cards(products.filter(p => state.favorites.includes(p.id))),
+    account, profile, settings, favorites:() => '<h1>المفضلة</h1>' + cards(products.filter(p => state.favorites.includes(p.id))),
     orders:() => orderContent(), order:() => orderContent(param)};
   view.innerHTML = Object.hasOwn(pages,path) ? pages[path]() : '<h1>الصفحة غير موجودة</h1><a href="#home">الرئيسية</a>';
   if (path === 'home') {
@@ -200,6 +225,8 @@ function render(scroll = false) {
     }, 6500);
   }
   if (path === 'shop') updateResults();
+  document.title = state.settings.name;
+  document.querySelector('#store-brand').lastChild.textContent = ' ' + state.settings.name;
   updateNavigation();
   if (scroll) window.scrollTo(0,0);
 }
@@ -258,9 +285,25 @@ view.addEventListener('submit', event => {
     state.profile = {name:data.get('name')?.trim() || 'متسوّقة لمسة بيوتي',identifier:data.get('identifier').trim()};
     save();
     location.hash = 'account';
+  } else if (form.id === 'store-settings' && previewAsManager) {
+    const name = data.get('name').trim();
+    if (!name) { notify('اكتب اسم المتجر'); return; }
+    state.settings = {name, contact:data.get('contact').trim(), delivery:Number(data.get('delivery'))};
+    save();
+    render();
+    notify('تم حفظ إعدادات المتجر');
+  } else if (form.id === 'order-status' && previewAsManager) {
+    const order = state.orders.find(item => item.id === form.dataset.order);
+    const status = data.get('status');
+    if (!order || !Object.hasOwn(orderStatuses,status)) return;
+    order.status = status;
+    save();
+    render();
+    notify('تم تحديث حالة الطلب');
   } else if (form.id === 'profile') {
-    state.profile.name = data.get('name').trim();
-    state.profile.address = data.get('address').trim();
+    const name = data.get('name').trim();
+    if (!name) { notify('اكتب الاسم'); return; }
+    state.profile = {...state.profile, name, address:data.get('address').trim()};
     save();
     location.hash = 'account';
     notify('تم حفظ التعديلات');
@@ -268,8 +311,37 @@ view.addEventListener('submit', event => {
 });
 const menuToggle = document.querySelector('#menu-toggle');
 const quickMenu = document.querySelector('#quick-menu');
+const menuMain = document.querySelector('#menu-main');
+const menuSections = document.querySelector('#menu-sections');
+const menuCategories = document.querySelector('#menu-categories');
+const menuBack = document.querySelector('#menu-back');
+const menuHeading = document.querySelector('#menu-heading');
+document.querySelector('#menu-section-links').innerHTML = categories.map(([id,name]) =>
+  '<li><a href="#shop/' + id + '">' + name + '</a></li>'
+).join('');
+document.querySelector('#menu-role').textContent = previewAsManager ? 'مدير المتجر' : 'زبون';
+document.querySelector('#menu-orders').textContent = orderLabel;
+
+function showMenuSections(show) {
+  menuMain.hidden = show;
+  menuSections.hidden = !show;
+  menuHeading.textContent = show ? 'الأقسام' : 'القائمة المختصرة';
+}
+menuCategories.addEventListener('click', () => {
+  showMenuSections(true);
+  quickMenu.scrollTop = 0;
+  menuBack.focus();
+});
+menuBack.addEventListener('click', () => {
+  showMenuSections(false);
+  menuCategories.focus();
+});
 menuToggle.addEventListener('click', () => {
+  showMenuSections(false);
+  document.querySelector('#menu-name').textContent = previewAsManager
+    ? state.settings.name : state.profile?.name || '';
   quickMenu.showModal();
+  quickMenu.scrollTop = 0;
   menuToggle.setAttribute('aria-expanded','true');
 });
 quickMenu.addEventListener('click', event => {

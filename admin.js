@@ -1,50 +1,122 @@
-const contentKey = 'lamsa-custom-content-v1';
-const customContent = {categories:[], products:[], banners:[]};
+const contentKey = 'lamsa-custom-content-v2';
+const catalogLists = {categories, products, banners};
 try {
-  const savedContent = JSON.parse(localStorage.getItem(contentKey));
-  for (const kind of Object.keys(customContent)) {
-    if (Array.isArray(savedContent?.[kind])) customContent[kind] = savedContent[kind];
+  const saved = JSON.parse(localStorage.getItem(contentKey));
+  const previous = saved ? null : JSON.parse(localStorage.getItem('lamsa-custom-content-v1'));
+  for (const [kind, list] of Object.entries(catalogLists)) {
+    if (Array.isArray(saved?.[kind])) list.splice(0, list.length, ...saved[kind]);
+    else if (Array.isArray(previous?.[kind])) list.push(...previous[kind]);
   }
 } catch {
-  // The original catalog remains available if local storage is unavailable.
+  // The bundled catalog is available when browser storage cannot be read.
 }
-categories.push(...customContent.categories);
-products.push(...customContent.products);
-banners.push(...customContent.banners);
+const managementLabels = {categories:'الأقسام', products:'المنتجات', banners:'أشرطة الإعلانات'};
+const imageTypes = 'image/jpeg,image/png,image/webp,image/avif';
 
-function managementPage() {
-  if (!previewAsManager) return '<h1>إدارة المتجر</h1><a href="#home">الرئيسية</a>';
-  const options = categories.map(([id,name]) =>
-    '<option value="' + id + '">' + escape(name) + '</option>'
+function managementPage(param = '') {
+  if (!previewAsManager) return '<h1>لوحة الإدارة</h1><a href="#home">الرئيسية</a>';
+  const [kind, edit] = param.split(':');
+  if (Object.hasOwn(managementLabels,kind)) return catalogManagement(kind,edit);
+  const pending = state.orders.filter(order => !['delivered','cancelled'].includes(order.status)).length;
+  const tiles = [
+    ['manage/categories','الأقسام',categories.length + ' قسم'],
+    ['manage/products','المنتجات',products.length + ' منتج'],
+    ['manage/banners','أشرطة الإعلانات',banners.length + ' إعلان'],
+    ['orders','الطلبات',pending + ' طلب قيد المتابعة'],
+    ['settings','إعدادات المتجر','الاسم والتواصل والتوصيل']
+  ];
+  const preview = new URL(location.href);
+  preview.searchParams.set('view','customer');
+  preview.hash = 'home';
+  return `<section class="admin-dashboard"><div class="row admin-heading"><h1>لوحة إدارة ${escape(state.settings.name)}</h1>
+    <a class="button secondary" href="${escape(preview.href)}" target="_blank" rel="noopener">معاينة المتجر</a></div>
+    <h2>نظرة عامة</h2><div class="admin-grid">${tiles.map(([path,title,summary]) =>
+      `<a class="panel admin-tile" href="#${path}"><strong>${title}</strong><span>${summary}</span></a>`
+    ).join('')}</div><p class="muted">البيانات التجريبية محفوظة في هذا المتصفح.</p></section>`;
+}
+
+function categoryOptions(selected = '', placeholder = '') {
+  return placeholder + categories.map(([id,name]) =>
+    `<option value="${id}"${selected === id ? ' selected' : ''}>${escape(name)}</option>`
   ).join('');
-  const image = '<label>الصورة<input name="image" type="file" accept="image/jpeg,image/png,image/webp,image/avif" required></label>';
-  const name = '<label>الاسم<input name="name" maxlength="80" required></label>';
-  return `<section class="narrow">
-    <h1>إدارة محتوى المتجر</h1>
-    <p class="muted">الإضافات التجريبية تُحفظ في هذا المتصفح. اختار صورة من الجهاز لكل إضافة.</p>
-    <div class="chips"><a href="#categories" class="button secondary">عرض الأقسام</a>
-    <a href="#shop" class="button secondary">عرض المنتجات</a>
-    <a href="#home" class="button secondary">عرض شريط الإعلانات</a></div>
-    <form class="panel" data-content="categories">
-      <h2>إضافة قسم</h2>${name}${image}<button>إضافة القسم</button>
-    </form>
-    <form class="panel" data-content="products">
-      <h2>إضافة منتج</h2>${name}
-      <label>القسم<select name="category" required><option value="">اختار القسم</option>${options}</select></label>
-      <label>السعر بالدينار العراقي<input type="number" name="price" min="1" max="1000000000" required></label>
-      <label>وصف المنتج<textarea name="description" maxlength="600"></textarea></label>
-      ${image}<button>إضافة المنتج</button>
-    </form>
-    <form class="panel" data-content="banners">
-      <h2>إضافة صورة لشريط الإعلانات المتحرك</h2>
-      <label>عنوان الإعلان<input name="name" maxlength="80" required></label>
-      <label>نص زر الإعلان<input name="copy" maxlength="40" required></label>
-      <label>القسم اللي يفتحه الإعلان<select name="category" required>${options}</select></label>
-      ${image}<button>إضافة الإعلان</button>
-    </form>
-  </section>`;
 }
 
+function catalogManagement(kind, edit) {
+  const list = catalogLists[kind];
+  const index = kind === 'banners' ? Number(edit) : list.findIndex(item => (item.id || item[0]) === edit);
+  const item = edit === undefined || edit === 'new' ? undefined : list[index];
+  const base = '#manage/' + kind;
+  const heading = `<a class="button secondary" href="#manage">‹ لوحة الإدارة</a><h1>${managementLabels[kind]}</h1>`;
+  if (edit !== undefined) {
+    if (edit !== 'new' && !item) return heading + '<p>العنصر غير موجود.</p>';
+    return heading + catalogForm(kind,item,index);
+  }
+  const filter = kind === 'products' ? `<div class="admin-filters"><label>بحث المنتج<input id="admin-search" type="search"></label>
+    <label>القسم<select id="admin-category-filter">${categoryOptions('', '<option value="">كل الأقسام</option>')}</select></label></div>` : '';
+  return heading + `<a class="button" href="${base}:new">إضافة ${{categories:'قسم',products:'منتج',banners:'إعلان'}[kind]}</a>` + filter +
+    '<div id="admin-list">' + catalogRows(kind) + '</div>';
+}
+
+function catalogRows(kind, query = '', category = '') {
+  const list = catalogLists[kind];
+  const rows = list.map((item,index) => {
+    const isCategory = kind === 'categories';
+    const id = isCategory ? item[0] : item.id ?? index;
+    const name = isCategory ? item[1] : item.name ?? item.title;
+    if (!name.includes(query) || (category && item.category !== category)) return '';
+    const image = isCategory ? item[2] || id : item.image;
+    const summary = kind === 'products' ? money(item.price) + ' · ' + (item.stock == null ? 'الكمية غير محددة' : 'الكمية ' + format.format(availableStock(item)))
+      : kind === 'banners' ? 'الترتيب ' + format.format(index + 1) : '';
+    const moves = kind === 'products' ? '' : `
+      <button class="secondary" type="button" data-move="${kind}/${index}/-1" aria-label="تحريك للأعلى" ${index === 0 ? 'disabled' : ''}>↑</button>
+      <button class="secondary" type="button" data-move="${kind}/${index}/1" aria-label="تحريك للأسفل" ${index === list.length - 1 ? 'disabled' : ''}>↓</button>`;
+    return `<article class="panel row admin-row">${photo(image,'','thumb')}<div class="grow"><strong>${escape(name)}</strong>
+      <div class="muted">${summary}</div></div><div class="admin-actions">
+      <a class="button secondary" href="#manage/${kind}:${id}">تعديل</a>${moves}</div></article>`;
+  }).join('');
+  return rows || '<p class="panel">ماكو عناصر للعرض.</p>';
+}
+
+function catalogForm(kind, item, index) {
+  const isCategory = kind === 'categories';
+  const isBanner = kind === 'banners';
+  const name = isCategory ? item?.[1] : item?.name ?? item?.title;
+  const image = isCategory ? item?.[2] || item?.[0] : item?.image;
+  const selected = isBanner ? item?.route.split('/')[1] : item?.category;
+  const category = isCategory ? '' : `<label>القسم<select name="category" required>${categoryOptions(selected,
+    '<option value="">اختار القسم</option>')}</select></label>`;
+  const extra = isCategory ? '' : isBanner ? `<label>نص زر الإعلان<input name="copy" maxlength="40" required value="${escape(item?.copy || '')}"></label>` :
+    `<label>السعر بالدينار العراقي<input name="price" type="number" min="1" max="1000000000" value="${item?.price ?? ''}" required></label>
+    <label>الكمية المتوفرة<input name="stock" type="number" min="0" max="1000000" value="${item?.stock == null ? '' : availableStock(item)}" required></label>
+    <label>الوصف<textarea name="description" maxlength="600">${escape(item?.description || '')}</textarea></label>
+    <label>صور إضافية للمنتج <small>اختياري، حتى 3 صور</small><input type="file" name="gallery" accept="${imageTypes}" multiple></label>
+    ${item?.gallery?.length ? `<small>${item.gallery.length} صور إضافية محفوظة. اختيار صور جديدة يستبدلها.</small>` : ''}`;
+  return `<form class="panel narrow" data-content="${kind}" data-index="${item ? index : ''}">
+    <h2>${item ? 'تعديل' : 'إضافة'}</h2>
+    <label>${isBanner ? 'عنوان الإعلان' : 'الاسم'}<input name="name" maxlength="80" required value="${escape(name || '')}"></label>
+    ${category}${extra}${image ? photo(image,'الصورة الحالية','thumb') : ''}
+    <label>${image ? 'استبدال الصورة' : 'الصورة الرئيسية'}<input name="image" type="file" accept="${imageTypes}" ${item ? '' : 'required'}></label>
+    <div class="chips"><button>حفظ</button><a class="button secondary" href="#manage/${kind}">إلغاء</a></div></form>`;
+}
+
+function persistCatalog(kind, next) {
+  const current = catalogLists[kind];
+  localStorage.setItem(contentKey, JSON.stringify({...catalogLists,[kind]:next}));
+  current.splice(0,current.length,...next);
+}
+
+function moveCatalogItem(value) {
+  if (!previewAsManager) return;
+  const [kind, rawIndex, rawDelta] = value.split('/');
+  if (!['categories','banners'].includes(kind)) return;
+  const index = Number(rawIndex), target = index + Number(rawDelta);
+  const next = [...catalogLists[kind]];
+  if (!next[index] || !next[target]) return;
+  [next[index],next[target]] = [next[target],next[index]];
+  try { persistCatalog(kind,next); }
+  catch { notify('تعذّر حفظ الترتيب.'); return; }
+  render();
+}
 async function readCatalogImage(file) {
   const allowed = ['image/jpeg','image/png','image/webp','image/avif'];
   if (!allowed.includes(file?.type) || file.size > 10000000) {
@@ -68,40 +140,49 @@ async function readCatalogImage(file) {
 async function saveCatalogItem(form, data) {
   if (!previewAsManager) return;
   const kind = form.dataset.content;
+  const index = form.dataset.index === '' ? -1 : Number(form.dataset.index);
+  const list = catalogLists[kind];
+  const previous = list[index];
   const name = data.get('name').trim();
   const category = data.get('category');
   const copy = data.get('copy')?.trim();
-  const price = Number(data.get('price'));
   if (!name || (kind === 'banners' && !copy)) {
-    notify('اكتب الاسم ونص الإعلان المطلوب.');
+    notify('اكتب الاسم والبيانات المطلوبة.');
     return;
   }
   const button = form.querySelector('button');
   if (button.disabled) return;
   button.disabled = true;
   try {
-    const image = await readCatalogImage(data.get('image'));
-    const id = 'custom-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2);
+    const file = data.get('image');
+    const isCategory = kind === 'categories';
+    const image = file?.size ? await readCatalogImage(file)
+      : isCategory ? previous?.[2] || previous?.[0] : previous?.image;
+    if (!image) throw new Error('اختار صورة رئيسية.');
+    const id = 'custom-' + crypto.randomUUID();
     let item;
-    if (kind === 'categories') {
-      item = [id,name,image];
+    if (isCategory) {
+      item = [previous?.[0] || id,name,image];
     } else if (kind === 'products') {
-      item = {id, name, category, price, image, description:data.get('description').trim()};
+      const files = data.getAll('gallery').filter(file => file.size);
+      if (files.length > 3) throw new Error('اختار 3 صور إضافية كحد أقصى.');
+      const gallery = files.length ? await Promise.all(files.map(readCatalogImage)) : previous?.gallery;
+      item = {...previous,id:previous?.id || id,name,category,image,gallery,price:Number(data.get('price')),
+        stock:Number(data.get('stock')) + soldQuantity(previous?.id),description:data.get('description').trim()};
+      if (file?.size) delete item.detail;
     } else {
-      item = {title:name, copy, image, route:'shop/' + category};
+      item = {title:name,copy,image,route:'shop/' + category};
     }
-
-    const next = [...customContent[kind],item];
-    try { localStorage.setItem(contentKey, JSON.stringify({...customContent, [kind]:next})); }
-    catch { throw new Error('تعذّر الحفظ بالمتصفح. جرّب صورة أصغر أو وفّر مساحة إضافية.'); }
-
-    customContent[kind] = next;
-    ({categories,products,banners})[kind].push(item);
-    if (kind === 'banners') slide = banners.length - 1;
-    if (form.isConnected) render();
-    notify('تمت الإضافة بنجاح');
+    const next = [...list];
+    if (previous && list[index] !== previous) throw new Error('تغيّر ترتيب العناصر. افتح العنصر من جديد.');
+    if (previous) next[index] = item;
+    else next.push(item);
+    try { persistCatalog(kind,next); }
+    catch { throw new Error('تعذّر الحفظ في المتصفح. جرّب صور بحجم أصغر.'); }
+    if (form.isConnected) location.hash = 'manage/' + kind;
+    notify('تم الحفظ');
   } catch (error) {
-    notify(error.message || 'تعذّرت الإضافة.');
+    notify(error.message || 'تعذّر الحفظ.');
   } finally {
     button.disabled = false;
   }

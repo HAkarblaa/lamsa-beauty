@@ -54,7 +54,8 @@ function cards(items) {
     '<article class="card"><a href="#product/' + p.id + '">' + photo(p.image,p.name) +
     '<strong>' + escape(p.name) + '</strong></a><span class="price">' + money(p.price) +
     (p.old ? '<del>' + money(p.old) + '</del>' : '') +
-    '</span><button data-add="' + p.id + '">أضيفي للسلة</button></article>').join('') +
+    '</span><button data-add="' + p.id + '"' + (availableStock(p) === 0 ? ' disabled>نفد المخزون' : '>أضيفي للسلة') +
+    '</button></article>').join('') +
     '</div>' : '<p class="panel">ماكو منتجات للعرض حالياً.</p>';
 }
 function categoryCards() {
@@ -109,13 +110,15 @@ function detail(id) {
   return '<section class="narrow"><h1>' + escape(p.name) + '</h1>' + photo(p.detail || p.image,p.name,'detail') +
     '<div class="row"><h2>' + money(p.price) + '</h2><button class="secondary" data-favorite="' + p.id +
     '">' + (state.favorites.includes(p.id) ? '♥ إزالة من المفضلة' : '♡ إضافة للمفضلة') + '</button></div>' +
+    (p.gallery?.length ? '<div class="grid product-gallery">' + p.gallery.map(src => photo(src,p.name)).join('') + '</div>' : '') +
+    (p.stock == null ? '' : '<p>المتوفر ' + format.format(availableStock(p)) + '</p>') +
     (p.description ? '<p class="panel">' + escape(p.description) + '</p>' : '') +
     '<form id="add-form" data-product="' + p.id + '">' +
     (p.shades ? '<fieldset class="panel"><legend>اختاري الدرجة</legend>' + p.shades.map((shade,i) =>
       '<label><input type="radio" name="shade" value="' + shade + '" ' + (i === 0 ? 'checked' : '') +
       '><span class="swatch" style="background:' + shades[i] + '"></span>' + shade + '</label>').join('') + '</fieldset>' : '') +
     '<label>الكمية<input name="qty" type="number" min="1" max="99" value="1" required></label>' +
-    '<button class="full">أضيفي للسلة</button></form></section>';
+    '<button class="full"' + (availableStock(p) === 0 ? ' disabled>نفد المخزون' : '>أضيفي للسلة') + '</button></form></section>';
 }
 function totals() {
   const subtotal = state.cart.reduce((sum,line) => sum + products.find(p => p.id === line.id).price * line.qty,0);
@@ -170,7 +173,7 @@ function login(signup = false) {
 function settings() {
   if (!previewAsManager) return profile();
   const {name,contact,delivery} = state.settings;
-  return '<h1>إعدادات المتجر</h1><form class="panel narrow" id="store-settings">' +
+  return '<a class="button secondary" href="#manage">‹ لوحة الإدارة</a><h1>إعدادات المتجر</h1><form class="panel narrow" id="store-settings">' +
     '<label>اسم المتجر<input name="name" value="' + escape(name) + '" maxlength="60" required></label>' +
     '<label>معلومات التواصل<input name="contact" value="' + escape(contact) + '" maxlength="120"></label>' +
     '<label>رسوم التوصيل بالدينار العراقي<input name="delivery" type="number" min="0" max="1000000" value="' +
@@ -179,7 +182,7 @@ function settings() {
 function account() {
   if (previewAsManager) return '<h1>حسابي</h1><div class="panel"><h2>' +
     escape(state.settings.name) + '</h2><span class="status">مدير المتجر</span></div>' +
-    '<a class="button" href="#settings">إعدادات المتجر</a> <a class="button secondary" href="#orders">إدارة الطلبات</a> <a class="button secondary" href="#manage">إدارة محتوى المتجر</a>';
+    '<a class="button" href="#manage">لوحة الإدارة</a>';
   if (!state.profile) return '<h1>حسابي</h1><div class="panel"><a class="button" href="#login">تسجيل الدخول</a> ' +
     '<a class="button secondary" href="#signup">إنشاء حساب</a></div><a href="#orders">الطلبات التجريبية</a>';
   return '<h1>حسابي</h1><div class="panel"><h2>' + escape(state.profile.name) + '</h2>' +
@@ -194,7 +197,7 @@ function profile() {
     '</textarea></label><button>حفظ</button></form>';
 }
 function orderContent(id) {
-  if (!id) return '<h1>' + orderLabel + '</h1>' + (state.orders.length ? state.orders.map(order =>
+  if (!id) return (previewAsManager ? '<a class="button secondary" href="#manage">‹ لوحة الإدارة</a>' : '') + '<h1>' + orderLabel + '</h1>' + (state.orders.length ? state.orders.map(order =>
     '<a class="panel row order-list-row" href="#order/' + escape(order.id) + '"><span>طلب <bdi>#' + escape(order.id) +
     '</bdi></span><span>' + money(order.total) + '</span><span class="status">' +
     orderStatuses[order.status || 'confirmed'] + '</span></a>').join('') : '<p>ماكو طلبات حالياً.</p>');
@@ -205,17 +208,21 @@ function orderContent(id) {
     '"><label>حالة الطلب<select name="status">' + Object.entries(orderStatuses).map(([value,label]) =>
       '<option value="' + value + '"' + (value === status ? ' selected' : '') + '>' + label + '</option>'
     ).join('') + '</select></label><button>حفظ الحالة</button></form>' : '';
+  const items = order.items?.length ? '<div class="panel"><h2>محتويات الطلب</h2>' + order.items.map(item =>
+    '<div class="row line"><span>' + escape(item.name) + (item.shade ? ' · ' + escape(item.shade) : '') +
+    ' × ' + format.format(item.qty) + '</span><span>' + money(item.price * item.qty) + '</span></div>'
+  ).join('') + '</div>' : '';
   return '<h1>' + orderStatuses[status] + '</h1><div class="panel"><p>رقم الطلب <bdi>#' + escape(order.id) + '</bdi></p>' +
     '<p>المحافظة ' + escape(order.province) + '</p><p>الإجمالي ' + money(order.total) +
     '</p><p>الدفع عند الاستلام</p><p class="muted">طلب تجريبي محفوظ على هذا الجهاز.</p></div>' +
-    editor + '<a class="button" href="#orders">' + orderLabel + '</a>';
+    items + editor + '<a class="button" href="#orders">' + orderLabel + '</a>';
 }
 function render(scroll = false) {
   const {path,param} = route();
   clearInterval(timer);
   const pages = {home, categories:() => '<h1>الأقسام</h1><div class="strip">توصيل لكل المحافظات</div><br>' + categoryCards(),
     shop:() => shop(param), product:() => detail(param), cart, checkout, login:() => login(), signup:() => login(true),
-    account, profile, settings, manage:managementPage, favorites:() => '<h1>المفضلة</h1>' + cards(products.filter(p => state.favorites.includes(p.id))),
+    account, profile, settings, manage:() => managementPage(param), favorites:() => '<h1>المفضلة</h1>' + cards(products.filter(p => state.favorites.includes(p.id))),
     orders:() => orderContent(), order:() => orderContent(param)};
   view.innerHTML = Object.hasOwn(pages,path) ? pages[path]() : '<h1>الصفحة غير موجودة</h1><a href="#home">الرئيسية</a>';
   if (path === 'home') {
@@ -233,8 +240,19 @@ function render(scroll = false) {
   updateNavigation();
   if (scroll) window.scrollTo(0,0);
 }
+function soldQuantity(id) {
+  return state.orders.reduce((total,order) => order.status === 'cancelled' ? total : total +
+    (order.items || []).reduce((sum,item) => sum + (item.id === id ? item.qty : 0),0),0);
+}
+function availableStock(product) {
+  return product.stock == null ? Infinity : Math.max(0,product.stock - soldQuantity(product.id));
+}
+function cartQuantity(id) {
+  return state.cart.reduce((count,line) => count + (line.id === id ? line.qty : 0),0);
+}
 function addProduct(id, shade, qty) {
   const p = products.find(product => product.id === id);
+  if (cartQuantity(id) + qty > availableStock(p)) { notify('الكمية المطلوبة تتجاوز المخزون.'); return; }
   const chosen = shade || p.shades?.[0] || '';
   const line = state.cart.find(item => item.id === id && item.shade === chosen);
   if (line) line.qty = Math.min(99,line.qty + qty);
@@ -243,12 +261,17 @@ function addProduct(id, shade, qty) {
   notify('تمت إضافة المنتج للسلة');
 }
 view.addEventListener('input', event => {
+  if (['admin-search','admin-category-filter'].includes(event.target.id)) {
+    document.querySelector('#admin-list').innerHTML = catalogRows('products',
+      document.querySelector('#admin-search').value.trim(),document.querySelector('#admin-category-filter').value);
+  }
   if (event.target.id === 'search' || event.target.id === 'sort') updateResults();
 });
 view.addEventListener('click', event => {
   const button = event.target.closest('button');
   if (!button) return;
   const data = button.dataset;
+  if (data.move) { moveCatalogItem(data.move); return; }
   if (data.add) addProduct(data.add,'',1);
   if (data.slide !== undefined) { slide = Number(data.slide); updateBanner(); }
   if (data.favorite) {
@@ -256,6 +279,11 @@ view.addEventListener('click', event => {
     state.favorites = state.favorites.includes(id) ? state.favorites.filter(item => item !== id) : [...state.favorites,id];
   } else if (data.quantity) {
     const [index,delta] = data.quantity.split('/').map(Number);
+    const id = state.cart[index].id;
+    if (delta > 0 && cartQuantity(id) + delta > availableStock(products.find(p => p.id === id))) {
+      notify('الكمية المطلوبة تتجاوز المخزون.');
+      return;
+    }
     state.cart[index].qty = Math.max(1,Math.min(99,state.cart[index].qty + delta));
   } else if (data.remove !== undefined) {
     state.cart.splice(Number(data.remove),1);
@@ -280,11 +308,20 @@ view.addEventListener('submit', event => {
     render();
     notify(state.coupon ? 'تم تطبيق خصم 10%' : 'رمز الخصم غير صالح');
   } else if (form.id === 'checkout' && state.cart.length) {
-    const order = {id:String(Date.now()), province:data.get('province'), total:totals().total};
-    state.orders.unshift(order);
-    state.cart = [];
-    state.coupon = false;
-    save();
+    const items = state.cart.map(line => {
+      const product = products.find(p => p.id === line.id);
+      return {...line,name:product.name,price:product.price};
+    });
+    if (items.some(item => cartQuantity(item.id) > availableStock(products.find(p => p.id === item.id)))) {
+      notify('المخزون تغيّر. عدّل الكميات بالسلة.');
+      return;
+    }
+    const order = {id:String(Date.now()), province:data.get('province'), total:totals().total, items};
+    const next = {...state,orders:[order,...state.orders],cart:[],coupon:false};
+    try { localStorage.setItem(key,JSON.stringify(next)); }
+    catch { notify('تعذّر حفظ الطلب في المتصفح.'); return; }
+    state = next;
+    updateNavigation();
     location.hash = 'order/' + order.id;
   } else if (form.id === 'login' || form.id === 'signup') {
     state.profile = {name:data.get('name')?.trim() || 'متسوّقة لمسة بيوتي',identifier:data.get('identifier').trim()};
@@ -301,8 +338,17 @@ view.addEventListener('submit', event => {
     const order = state.orders.find(item => item.id === form.dataset.order);
     const status = data.get('status');
     if (!order || !Object.hasOwn(orderStatuses,status)) return;
-    order.status = status;
-    save();
+    if (order.status === 'cancelled' && status !== 'cancelled' && (order.items || []).some(line =>
+      order.items.reduce((qty,item) => qty + (item.id === line.id ? item.qty : 0),0) >
+        availableStock(products.find(product => product.id === line.id))
+    )) {
+      notify('المخزون الحالي ما يكفي لإعادة تفعيل الطلب.');
+      return;
+    }
+    const next = {...state,orders:state.orders.map(item => item === order ? {...item,status} : item)};
+    try { localStorage.setItem(key,JSON.stringify(next)); }
+    catch { notify('تعذّر حفظ حالة الطلب.'); return; }
+    state = next;
     render();
     notify('تم تحديث حالة الطلب');
   } else if (form.id === 'profile') {

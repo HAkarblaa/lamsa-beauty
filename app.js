@@ -495,33 +495,22 @@ view.addEventListener('submit', event => {
 });
 const menuToggle = document.querySelector('#menu-toggle');
 const quickMenu = document.querySelector('#quick-menu');
-const menuMain = document.querySelector('#menu-main');
-const menuSections = document.querySelector('#menu-sections');
+const menuSectionLinks = document.querySelector('#menu-section-links');
 const menuCategories = document.querySelector('#menu-categories');
-const menuBack = document.querySelector('#menu-back');
-const menuHeading = document.querySelector('#menu-heading');
 document.querySelector('#menu-manage').hidden = !previewAsManager;
 document.querySelector('#menu-role').textContent = previewAsManager ? 'مدير المتجر' : 'زبون';
 document.querySelector('#menu-orders').textContent = orderLabel;
 
 function showMenuSections(show) {
-  menuMain.hidden = show;
-  menuSections.hidden = !show;
-  menuHeading.textContent = translate(show ? 'الأقسام' : 'القائمة المختصرة');
-}
-menuCategories.addEventListener('click', () => {
-  document.querySelector('#menu-section-links').innerHTML = categories.map(category =>
+  menuSectionLinks.hidden = !show;
+  menuCategories.setAttribute('aria-expanded',String(show));
+  if (!show) return;
+  menuSectionLinks.innerHTML = categories.map(category =>
     '<li><a href="#shop/' + category[0] + '">' + escape(categoryName(category)) + '</a></li>'
   ).join('');
-  localize(menuSections);
-  showMenuSections(true);
-  quickMenu.scrollTop = 0;
-  menuBack.focus();
-});
-menuBack.addEventListener('click', () => {
-  showMenuSections(false);
-  menuCategories.focus();
-});
+  localize(menuSectionLinks);
+}
+menuCategories.addEventListener('click', () => showMenuSections(menuSectionLinks.hidden));
 menuToggle.addEventListener('click', () => {
   showMenuSections(false);
   document.querySelector('#menu-name').textContent = previewAsManager

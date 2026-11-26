@@ -18,19 +18,18 @@
   <div id="menu-main">
     <ul>
       <li><a class="menu-account" href="#account"><strong>حسابي</strong><span id="menu-name"></span><small id="menu-role" class="status"></small></a></li>
-      <li><button type="button" id="menu-categories">الأقسام <span aria-hidden="true">‹</span></button></li>
-      <li><a href="#settings">الإعدادات</a></li>
+      <li><a href="#home">الرئيسية</a></li>
+      <li>
+        <button type="button" id="menu-categories" aria-expanded="false" aria-controls="menu-section-links">الأقسام <span aria-hidden="true">▾</span></button>
+        <ul id="menu-section-links" hidden></ul>
+      </li>
+      <li><a href="#cart">السلة</a></li>
+      <li><a href="#favorites">المفضلة</a></li>
       <li><a id="menu-orders" href="#orders">طلباتي</a></li>
       <li id="menu-manage" hidden><a href="#manage">لوحة الإدارة</a></li>
-      <li><a href="#favorites">المفضلة</a></li>
-      <li><a href="#cart">السلة</a></li>
-      <li><a href="#home">الرئيسية</a></li>
+      <li><a href="#settings">الإعدادات</a></li>
       <li><label for="store-language">اللغة</label><select id="store-language"><option value="ar" lang="ar">العربية</option><option value="en" lang="en">English</option></select></li>
     </ul>
-  </div>
-  <div id="menu-sections" hidden>
-    <button type="button" id="menu-back"><span aria-hidden="true">›</span> رجوع</button>
-    <ul id="menu-section-links"></ul>
   </div>
 </dialog>
 <main id="view"></main>

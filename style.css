@@ -12,9 +12,9 @@
 #menu-name{display:block;margin:4px 0;overflow-wrap:anywhere}
 #menu-name:empty{display:none}
 #menu-role{display:inline-block;margin-top:4px}
-#menu-categories,#menu-back{background:transparent;color:inherit;text-align:start;min-height:44px}
+#menu-categories{background:transparent;color:inherit;text-align:start;min-height:44px}
 #menu-categories{display:flex;justify-content:space-between;align-items:center;width:100%;padding:12px}
-#menu-categories:hover,#menu-back:hover{background:var(--pink);color:var(--rose)}
+#menu-categories:hover:hover{background:var(--pink);color:var(--rose)}
 #quick-menu a{min-height:44px}
 .order-list-row{flex-wrap:wrap}
 #store-brand{overflow-wrap:anywhere}
@@ -67,19 +67,17 @@ a.card:active,
 nav a:active,
 #quick-menu a:active,
 #menu-toggle:active,
-#menu-categories:active,
-#menu-back:active{
+#menu-categories:active{
   filter:brightness(.84);
   box-shadow:inset 0 0 0 2px var(--rose);
   transform:translateY(2px);
 }
 nav a:active,
 #quick-menu a:active,
-#menu-categories:active,
-#menu-back:active{background:var(--pink);color:var(--rose)}
+#menu-categories:active{background:var(--pink);color:var(--rose)}
 @media(prefers-reduced-motion:reduce){
   a.button:active,button:not(:disabled):active,a.card:active,nav a:active,#quick-menu a:active,
-  #menu-toggle:active,#menu-categories:active,#menu-back:active{transform:none}
+  #menu-toggle:active,#menu-categories:active:active{transform:none}
 }
 
 .header-actions{display:flex;align-items:center;gap:8px}
@@ -168,3 +166,8 @@ nav a:active,
 .category-depth-art[data-art="brushes"]{background-position:50.85% 80.51%}
 .category-depth-art[data-art="offers"]{background-position:3.26% 80.51%}
 .category-card .depth-photo img{aspect-ratio:318/284}
+
+#menu-categories[aria-expanded="true"]{background:var(--pink);color:var(--rose)}
+#menu-categories[aria-expanded="true"] span{transform:rotate(180deg)}
+#quick-menu #menu-section-links{margin:6px 12px 10px 0;margin-inline:12px 0;padding-inline-start:8px;border-inline-start:2px solid var(--line)}
+#quick-menu #menu-section-links a{padding-inline:10px;overflow-wrap:anywhere}

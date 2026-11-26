@@ -1,12 +1,12 @@
 const view = document.querySelector('#view');
 const notice = document.querySelector('#notice');
-const format = new Intl.NumberFormat('ar-IQ');
-const money = amount => format.format(amount) + ' د.ع';
+const format = new Intl.NumberFormat('ar-IQ', {numberingSystem:'latn'});
+const money = amount => '<bdi dir="ltr">' + format.format(amount) + '</bdi> د.ع';
 const escape = value => String(value).replace(/[&<>"']/g, char => ({
   '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'
 })[char]);
 const photo = (name, alt = '', css = '') =>
-  '<img class="' + css + '" src="assets/' + name + '.webp" alt="' + escape(alt) + '">';
+  '<img class="' + css + '" src="./' + name + '.webp" alt="' + escape(alt) + '">';
 const delivery = 4000;
 const key = 'lamsa-demo-v1';
 const initial = {cart:[], favorites:[], orders:[], profile:null, coupon:false};
@@ -246,9 +246,9 @@ view.addEventListener('submit', event => {
     state.coupon = data.get('coupon').trim().toUpperCase() === 'BEAUTY10';
     save();
     render();
-    notify(state.coupon ? 'تم تطبيق خصم ١٠٪' : 'رمز الخصم غير صالح');
+    notify(state.coupon ? 'تم تطبيق خصم 10%' : 'رمز الخصم غير صالح');
   } else if (form.id === 'checkout' && state.cart.length) {
-    const order = {id:Date.now().toString(36).toUpperCase(), province:data.get('province'), total:totals().total};
+    const order = {id:String(Date.now()), province:data.get('province'), total:totals().total};
     state.orders.unshift(order);
     state.cart = [];
     state.coupon = false;
@@ -266,5 +266,20 @@ view.addEventListener('submit', event => {
     notify('تم حفظ التعديلات');
   }
 });
-window.addEventListener('hashchange',() => render(true));
+const menuToggle = document.querySelector('#menu-toggle');
+const quickMenu = document.querySelector('#quick-menu');
+menuToggle.addEventListener('click', () => {
+  quickMenu.showModal();
+  menuToggle.setAttribute('aria-expanded','true');
+});
+quickMenu.addEventListener('click', event => {
+  if (event.target.closest('a') || event.target === quickMenu) quickMenu.close();
+});
+quickMenu.addEventListener('close', () => {
+  menuToggle.setAttribute('aria-expanded','false');
+});
+window.addEventListener('hashchange', () => {
+  if (quickMenu.open) quickMenu.close();
+  render(true);
+});
 render();

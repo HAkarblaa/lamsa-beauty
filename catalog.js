@@ -15,7 +15,7 @@ const products = [
   }))
 ];
 const banners = [
-  {title:'خصم ٢٥٪ على منتجات مختارة', copy:'تسوّقي عروض المكياج', image:'banner', route:'shop/offers'},
+  {title:'خصم 25% على منتجات مختارة', copy:'تسوّقي عروض المكياج', image:'banner', route:'shop/offers'},
   {title:'ألوان تناسب كل إطلالة', copy:'اكتشفي منتجات الشفاه', image:'lips', route:'shop/lips'},
   {title:'فرش وأدوات المكياج', copy:'تسوّقي الأدوات', image:'brushes', route:'shop/brushes'}
 ];

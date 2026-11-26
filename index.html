@@ -10,7 +10,19 @@
 <script src="app.js" defer></script>
 </head>
 <body>
-<header><a class="brand" href="#home"><span aria-hidden="true">❀</span> لمسة بيوتي</a><a href="#favorites" aria-label="المفضلة">♡</a></header>
+<header><a class="brand" href="#home"><span aria-hidden="true">❀</span> لمسة بيوتي</a><button id="menu-toggle" type="button" aria-label="فتح القائمة المختصرة" aria-controls="quick-menu" aria-expanded="false">☰</button></header>
+<dialog id="quick-menu" aria-labelledby="menu-heading">
+  <div class="row"><h2 id="menu-heading">القائمة المختصرة</h2><form method="dialog"><button type="submit" class="secondary" aria-label="إغلاق القائمة">×</button></form></div>
+  <ul>
+    <li><a href="#home">الرئيسية</a></li>
+    <li><a href="#categories">الأقسام</a></li>
+    <li><a href="#shop/offers">العروض</a></li>
+    <li><a href="#favorites">المفضلة</a></li>
+    <li><a href="#cart">السلة</a></li>
+    <li><a href="#orders">طلباتي</a></li>
+    <li><a href="#account">حسابي</a></li>
+  </ul>
+</dialog>
 <main id="view"></main>
 <nav aria-label="التنقل الرئيسي">
 <a href="#home">⌂ <span>الرئيسية</span></a><a href="#categories">▦ <span>الأقسام</span></a><a href="#cart">▤ <span>السلة <b id="count"></b></span></a><a href="#account">♙ <span>حسابي</span></a>

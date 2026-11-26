@@ -48,3 +48,36 @@ main .search{position:sticky;top:var(--header-clearance);z-index:1;background:va
 .purchase-bar{position:fixed;inset-inline:12px;max-width:610px;margin-inline:auto;bottom:calc(var(--nav-clearance) + env(safe-area-inset-bottom));z-index:2;background:#fff9f6;border:1px solid var(--line);border-radius:12px;padding:10px;margin-bottom:6px}
 #store-settings input[type=color]{height:48px}
 @media(max-width:450px){.card-action{font-size:12px;padding-inline:4px}}
+
+/* Keep neighboring controls easy to distinguish and tap. */
+.grid.categories{gap:14px}
+.chips{gap:10px}
+nav{gap:8px;padding-inline:8px}
+#quick-menu li+li{margin-block-start:5px}
+.admin-actions{gap:8px}
+.panel button[data-quantity],.panel button[data-remove]{min-width:40px;min-height:40px}
+.panel button[data-quantity]{margin-inline:4px}
+.panel button[data-remove]{margin-block-start:8px}
+@media(max-width:450px){.grid.categories{gap:10px}}
+
+/* Press feedback works for mouse, touch, and keyboard activation. */
+a.button:active,
+button:not(:disabled):active,
+a.card:active,
+nav a:active,
+#quick-menu a:active,
+#menu-toggle:active,
+#menu-categories:active,
+#menu-back:active{
+  filter:brightness(.84);
+  box-shadow:inset 0 0 0 2px var(--rose);
+  transform:translateY(2px);
+}
+nav a:active,
+#quick-menu a:active,
+#menu-categories:active,
+#menu-back:active{background:var(--pink);color:var(--rose)}
+@media(prefers-reduced-motion:reduce){
+  a.button:active,button:not(:disabled):active,a.card:active,nav a:active,#quick-menu a:active,
+  #menu-toggle:active,#menu-categories:active,#menu-back:active{transform:none}
+}

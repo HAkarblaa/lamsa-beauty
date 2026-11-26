@@ -30,10 +30,16 @@ function save() {
   localStorage.setItem(key, JSON.stringify(state));
   updateNavigation();
 }
-function notify(message) {
+function notify(message, cartLink = false) {
   notice.textContent = translate(message);
+  if (cartLink) {
+    const link = document.createElement('a');
+    link.href = '#cart';
+    link.textContent = translate('عرض السلة');
+    notice.append(link);
+  }
   clearTimeout(noticeTimer);
-  noticeTimer = setTimeout(() => { notice.textContent = ''; }, 2400);
+  noticeTimer = setTimeout(() => { notice.textContent = ''; }, cartLink ? 6000 : 2400);
 }
 function route() {
   const [path, param] = (location.hash.slice(1) || 'home').split('/');
@@ -56,15 +62,21 @@ function productName(product) {
 function categoryName(category) {
   return language === 'en' && category?.[3] ? category[3] : category?.[1];
 }
+function productVisible(product) {
+  return !product.hidden && !(state.settings.hideExpired && expiryStatus(product.expiry) === 'expired');
+}
+function searchKey(value) {
+  return (value || '').normalize('NFKD').replace(/[ً-ٟـ]/g,'').replace(/[أإآ]/g,'ا').toLowerCase();
+}
 function cards(items) {
-  items = items.filter(product => !product.hidden);
+  items = items.filter(product => productVisible(product));
   return items.length ? '<div class="grid">' + items.map(p =>
     '<article class="card product-card"><a href="#product/' + p.id + '">' +
     '<span class="depth-photo">' + photo(p.image,productName(p)) + '</span>' +
     '<strong>' + escape(productName(p)) + '</strong></a><span class="price">' + money(p.price) +
     (p.old ? '<del>' + money(p.old) + '</del>' : '') +
     '</span>' + ((p.variants?.length || p.shades?.length) && availableStock(p) > 0
-      ? '<a class="button card-action" href="#product/' + p.id + '">اختاري الدرجة</a>'
+      ? '<button type="button" class="card-action" data-quick-add="' + p.id + '">اختاري الدرجة</button>'
       : '<button data-add="' + p.id + '"' + (availableStock(p) === 0 ? ' disabled>نفد المخزون' : '>أضيفي للسلة') + '</button>') +
     '</article>').join('') +
     '</div>' : '<p class="panel">ماكو منتجات للعرض حالياً.</p>';
@@ -94,7 +106,7 @@ function updateBanner() {
     button.setAttribute('aria-pressed',String(i === slide)));
 }
 function home() {
-  const recent = products.filter(p => !p.hidden).reverse().slice(0,6);
+  const recent = products.filter(p => productVisible(p)).reverse().slice(0,6);
   return searchBox() + '<div id="home-content"><div id="banner"></div><div class="dots" aria-label="العروض">' +
     banners.map((_,i) => '<button data-slide="' + i + '" aria-label="عرض ' + (i+1) + '"></button>').join('') +
     '</div><div class="row"><h2>الأقسام</h2><a href="#categories">عرض الكل</a></div>' + categoryCards() +
@@ -120,7 +132,7 @@ function shop(id) {
     ...products.filter(p => p.category === id).map(productType).filter(Boolean)])];
   const filter = types.length ? '<label>نوع المنتج<select id="type-filter"><option value="">كل الأنواع</option>' +
     types.map(type => '<option value="' + escape(type) + '">' + escape(type) + '</option>').join('') + '</select></label>' : '';
-  const candidates = products.filter(p => !p.hidden && (!id || p.category === id || (id === 'offers' && p.old)));
+  const candidates = products.filter(p => productVisible(p) && (!id || p.category === id || (id === 'offers' && p.old)));
   const options = values => [...new Set(values.filter(Boolean))].map(value =>
     '<option value="' + escape(value) + '">' + escape(value) + '</option>').join('');
   const brands = brandOptions(candidates);
@@ -136,7 +148,7 @@ function updateResults() {
   const results = document.querySelector('#results');
   if (!results) return;
   const {path,param} = route();
-  const query = document.querySelector('#search').value.trim().toLowerCase();
+  const query = searchKey(document.querySelector('#search').value.trim());
   const type = document.querySelector('#type-filter')?.value;
   if (path === 'home') {
     document.querySelector('#home-content').hidden = Boolean(query);
@@ -146,19 +158,26 @@ function updateResults() {
   const value = id => document.querySelector('#' + id)?.value || '';
   const brand = value('brand-filter'), shade = value('shade-filter');
   const min = value('price-min'), max = value('price-max');
-  const list = products.filter(p => !p.hidden && (!brand || brandKey(p.brand) === brand) &&
+  const list = products.filter(p => productVisible(p) && (!brand || brandKey(p.brand) === brand) &&
     (!min || p.price >= Number(min)) && (!max || p.price <= Number(max)) &&
     (!shade || (p.variants?.length ? p.variants.some(v => (language === 'en' && v.nameEn ? v.nameEn : v.name) === shade) : p.shades?.includes(shade))) &&
     (!param || (p.category === param || (param === 'offers' && p.old))) && (!type || productType(p) === type) &&
-    [p.name,productName(p),translate(p.name)].some(name => name.toLowerCase().includes(query)));
+    [p.name,p.nameEn,english[p.name],p.brand].some(name => searchKey(name).includes(query)));
   const sort = document.querySelector('#sort')?.value;
   if (sort) list.sort((a,b) => sort === 'low' ? a.price-b.price : b.price-a.price);
-  results.innerHTML = cards(list);
+  const selected = ['type-filter','brand-filter','shade-filter','price-min','price-max','sort'].flatMap(id => {
+    const control = document.querySelector('#' + id);
+    if (!control?.value) return [];
+    return [control.selectedOptions?.[0]?.textContent || control.parentElement.firstChild.textContent.trim() + ' ' + control.value];
+  });
+  results.innerHTML = (selected.length || query ?
+    '<div class="chips filter-summary">' + selected.map(label => '<span class="status">' + escape(label) + '</span>').join('') +
+    '<button type="button" class="secondary" data-clear-filters>مسح الفلاتر</button></div>' : '') + cards(list);
   localize(results);
 }
 function detail(id) {
   const p = products.find(item => item.id === id);
-  if (!p || p.hidden) return '<h1>المنتج غير موجود</h1>';
+  if (!p || !productVisible(p)) return '<h1>المنتج غير موجود</h1>';
   const colors = ['#a3283f','#b35470','#97594e','#c58d7a'];
   const shades = p.variants?.length ? p.variants : (p.shades || []).map((name,i) => ({name,color:colors[i]}));
   const firstAvailable = shades.findIndex(v => availableStock(p,v.name) > 0);
@@ -266,7 +285,8 @@ function settings() {
     '<label>معلومات التواصل<input name="contact" value="' + escape(contact) + '" maxlength="120"></label>' +
     '<label>رسوم التوصيل بالدينار العراقي<input name="delivery" type="number" min="0" max="1000000" value="' +
     delivery + '" required></label><label>لون خلفية المتجر<input name="background" type="color" value="' +
-    background + '"></label><div class="chips"><button>حفظ</button><a class="button secondary" href="#manage">إلغاء</a></div></form>';
+    background + '"></label><label><input type="checkbox" name="hideExpired"' +
+    (state.settings.hideExpired ? ' checked' : '') + '> إخفاء المنتجات المنتهية تلقائياً</label><div class="chips"><button>حفظ</button><a class="button secondary" href="#manage">إلغاء</a></div></form>';
 }
 function account() {
   if (previewAsManager) return '<h1>حسابي</h1><div class="panel"><h2>' +
@@ -315,7 +335,7 @@ function render(scroll = false) {
   clearInterval(timer);
   const pages = {home, categories:() => '<h1>الأقسام</h1><div class="strip">توصيل لكل المحافظات</div><br>' + categoryCards(),
     shop:() => shop(param), product:() => detail(param), cart, checkout, review:reviewOrder, login:() => login(), signup:() => login(true),
-    account, profile, settings, manage:() => managementPage(param), favorites:() => '<h1>المفضلة</h1>' + cards(products.filter(p => !p.hidden && state.favorites.includes(p.id))),
+    account, profile, settings, manage:() => managementPage(param), favorites:() => '<h1>المفضلة</h1>' + cards(products.filter(p => productVisible(p) && state.favorites.includes(p.id))),
     orders:() => orderContent(), order:() => orderContent(param)};
   pages['expiry-notifications'] = expiryNotifications;
   view.innerHTML = Object.hasOwn(pages,path) ? pages[path]() : '<h1>الصفحة غير موجودة</h1><a href="#home">الرئيسية</a>';
@@ -358,7 +378,7 @@ function stockScope(product,line) {
 }
 function addProduct(id, shade, qty) {
   const p = products.find(product => product.id === id);
-  if (!p || p.hidden) return;
+  if (!p || !productVisible(p)) return;
   const chosen = shade || p.variants?.[0]?.name || p.shades?.[0] || '';
   const scope = stockScope(p,{shade:chosen});
   if (cartQuantity(id,scope) + qty > availableStock(p,scope)) { notify('الكمية المطلوبة تتجاوز المخزون.'); return; }
@@ -366,7 +386,8 @@ function addProduct(id, shade, qty) {
   if (line) line.qty = Math.min(99,line.qty + qty);
   else state.cart.push({id,shade:chosen,qty});
   save();
-  notify('تمت إضافة المنتج للسلة');
+  notify('تمت إضافة المنتج للسلة',true);
+  return true;
 }
 view.addEventListener('input', event => {
   if (['admin-search','admin-category-filter','admin-alert','admin-brand'].includes(event.target.id)) {
@@ -383,6 +404,17 @@ view.addEventListener('click', event => {
   if (button.hasAttribute('data-stop-barcode')) { stopProductBarcodeScan?.(); return; }
   const data = button.dataset;
   if (button.hasAttribute('data-cancel-checkout')) { checkoutDraft = null; location.hash = 'cart'; return; }
+  if (data.quickAdd) { openQuickAdd(data.quickAdd); return; }
+  if (button.hasAttribute('data-clear-filters')) {
+    for (const id of ['search','type-filter','brand-filter','shade-filter','price-min','price-max','sort']) {
+      const control = document.querySelector('#' + id);
+      if (control) control.value = '';
+    }
+    updateResults();
+    document.querySelector('#search').focus();
+    return;
+  }
+  if (data.expiryHide) { toggleExpiryProduct(data.expiryHide); return; }
   if (data.photoStep) {
     const gallery = document.querySelector('#product-photos');
     gallery.scrollBy({left:Number(data.photoStep) * gallery.clientWidth * (language === 'ar' ? -1 : 1),behavior:'auto'});
@@ -399,7 +431,7 @@ view.addEventListener('click', event => {
     const id = state.cart[index].id;
     const product = products.find(p => p.id === id);
     const scope = stockScope(product,state.cart[index]);
-    if (delta > 0 && (product.hidden || cartQuantity(id,scope) + delta > availableStock(product,scope))) {
+    if (delta > 0 && (!productVisible(product) || cartQuantity(id,scope) + delta > availableStock(product,scope))) {
       notify('الكمية المطلوبة تتجاوز المخزون.');
       return;
     }
@@ -439,7 +471,7 @@ view.addEventListener('submit', event => {
     if (items.some(item => {
       const product = products.find(p => p.id === item.id);
       const shade = stockScope(product,item);
-      return product.hidden || cartQuantity(item.id,shade) > availableStock(product,shade);
+      return !productVisible(product) || cartQuantity(item.id,shade) > availableStock(product,shade);
     })) {
       notify('المخزون تغيّر. عدّل الكميات بالسلة.');
       return;
@@ -459,7 +491,7 @@ view.addEventListener('submit', event => {
   } else if (form.id === 'store-settings' && previewAsManager) {
     const name = data.get('name').trim();
     if (!name) { notify('اكتب اسم المتجر'); return; }
-    state.settings = {name, contact:data.get('contact').trim(), delivery:Number(data.get('delivery')),background:data.get('background')};
+    state.settings = {name, contact:data.get('contact').trim(), delivery:Number(data.get('delivery')),background:data.get('background'),hideExpired:data.has('hideExpired')};
     save();
     render();
     notify('تم حفظ إعدادات المتجر');
@@ -492,6 +524,39 @@ view.addEventListener('submit', event => {
     location.hash = 'account';
     notify('تم حفظ التعديلات');
   }
+});
+const quickAddDialog = document.querySelector('#quick-add');
+const quickAddForm = document.querySelector('#quick-add-form');
+function openQuickAdd(id) {
+  const product = products.find(p => p.id === id);
+  if (!product || !productVisible(product)) return;
+  const variants = product.variants?.length ? product.variants : (product.shades || []).map(name => ({name}));
+  const choices = variants.map(variant => {
+    const stock = availableStock(product,stockScope(product,{shade:variant.name})) -
+      cartQuantity(id,stockScope(product,{shade:variant.name}));
+    return {variant,stock};
+  });
+  const first = choices.findIndex(choice => choice.stock > 0);
+  quickAddForm.dataset.product = id;
+  quickAddForm.innerHTML = `<h2 id="quick-add-title">${escape(productName(product))}</h2>
+    <p>${money(product.price)}</p><fieldset class="panel"><legend>اختاري الدرجة</legend>${choices.map(({variant,stock},i) =>
+      `<label><input type="radio" name="shade" value="${escape(variant.name)}" required ${i === first ? 'checked' : ''}
+        ${stock <= 0 ? 'disabled' : ''}> <span>${escape(language === 'en' && variant.nameEn ? variant.nameEn : variant.name)}</span>
+        ${stock <= 0 ? '<small>نفد المخزون</small>' : ''}</label>`).join('')}</fieldset>
+    <label>الكمية<input type="number" name="qty" min="1" max="99" value="1" required></label>
+    <p id="quick-add-error" role="status"></p><div class="chips"><button ${first < 0 ? 'disabled' : ''}>أضيفي للسلة</button>
+    <button type="button" class="secondary" data-quick-close>إلغاء</button></div>`;
+  localize(quickAddForm);
+  if (!quickAddDialog.open) quickAddDialog.showModal();
+}
+quickAddDialog.addEventListener('click',event => {
+  if (event.target === quickAddDialog || event.target.closest('[data-quick-close]')) quickAddDialog.close();
+});
+quickAddForm.addEventListener('submit',event => {
+  event.preventDefault();
+  const data = new FormData(quickAddForm);
+  if (addProduct(quickAddForm.dataset.product,data.get('shade'),Number(data.get('qty')))) quickAddDialog.close();
+  else document.querySelector('#quick-add-error').textContent = translate('الكمية المطلوبة تتجاوز المخزون.');
 });
 const menuToggle = document.querySelector('#menu-toggle');
 const quickMenu = document.querySelector('#quick-menu');
@@ -528,6 +593,7 @@ quickMenu.addEventListener('close', () => {
 window.addEventListener('pagehide', () => stopProductBarcodeScan?.());
 window.addEventListener('hashchange', () => {
   stopProductBarcodeScan?.();
+  if (quickAddDialog.open) quickAddDialog.close();
   if (quickMenu.open) quickMenu.close();
   render(true);
 });

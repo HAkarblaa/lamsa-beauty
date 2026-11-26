@@ -171,3 +171,10 @@ nav a:active,
 #menu-categories[aria-expanded="true"] span{transform:rotate(180deg)}
 #quick-menu #menu-section-links{margin:6px 12px 10px 0;margin-inline:12px 0;padding-inline-start:8px;border-inline-start:2px solid var(--line)}
 #quick-menu #menu-section-links a{padding-inline:10px;overflow-wrap:anywhere}
+
+#quick-add{position:fixed;inset:auto 0 0;width:min(100%,520px);max-width:none;max-height:85vh;margin:0 auto;
+  padding:20px;border:1px solid var(--line);border-radius:20px 20px 0 0;background:#fff9f6;color:var(--ink)}
+#quick-add::backdrop{background:#361c2c75}
+#quick-add-error:empty{display:none}
+#notice a{pointer-events:auto;display:inline-block;margin-inline-start:10px;color:inherit;text-decoration:underline}
+.filter-summary{align-items:center}

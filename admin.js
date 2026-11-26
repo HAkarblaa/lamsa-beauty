@@ -48,11 +48,19 @@ function categoryOptions(selected = '', placeholder = '') {
 
 function catalogManagement(kind, edit) {
   const list = catalogLists[kind];
+  const copyId = kind === 'products' && edit?.startsWith('copy-') ? edit.slice(5) : '';
   const index = kind === 'banners' ? Number(edit) : list.findIndex(item => (item.id || item[0]) === edit);
   const item = edit === undefined || edit === 'new' ? undefined : list[index];
   const base = '#manage/' + kind;
   const heading = `<a class="button secondary" href="#manage">‹ لوحة الإدارة</a><h1>${managementLabels[kind]}</h1>`;
   const alert = kind === 'products' && ['low','expiry','soon','expired'].includes(edit) ? edit : '';
+  if (copyId) {
+    const source = products.find(product => product.id === copyId);
+    if (!source) return heading + '<p>العنصر غير موجود.</p>';
+    const draft = {...source,id:'',barcode:'',expiry:'',stock:0,hidden:true,
+      variants:source.variants?.map(variant => ({...variant,stock:0}))};
+    return heading + '<a class="button secondary" href="#manage/products">رجوع</a>' + catalogForm(kind,draft,-1,copyId);
+  }
   if (edit !== undefined && !alert) {
     if (edit !== 'new' && !item) return heading + '<p>العنصر غير موجود.</p>';
     return heading + '<a class="button secondary" href="' + base + '">رجوع</a>' + catalogForm(kind,item,index);
@@ -90,14 +98,17 @@ function catalogRows(kind, query = '', category = '', alert = '', brand = '') {
       ${kind === 'products' ? `<small>${item.hidden ? 'مخفي' : 'ظاهر'}${item.barcode ? ' · ' + escape(item.barcode) : ''}</small>
         ${item.brand ? `<div class="muted">${escape(item.brand)}</div>` : ''}
         ${productAlerts(item).includes('low') ? '<div class="muted">مخزون قليل</div>' : ''}
+        ${item.purchaseCost == null ? '' : `<div><span>كلفة الشراء</span> · ${money(item.purchaseCost)}</div>`}
         ${expiryBadge(item)}` : ''}
       </div><div class="admin-actions">
-      <a class="button secondary" href="#manage/${kind}:${id}">تعديل</a>${moves}</div></article>`;
+      <a class="button secondary" href="#manage/${kind}:${id}">${['soon','expired'].includes(alert) ? 'تعديل الصلاحية' : 'تعديل'}</a>
+      ${kind === 'products' ? `<a class="button secondary" href="#manage/products:copy-${id}">نسخ المنتج</a>` : ''}
+      ${kind === 'products' && ['soon','expired'].includes(alert) ? `<button type="button" class="secondary" data-expiry-hide="${id}">${item.hidden ? 'إظهار المنتج' : 'إخفاء المنتج'}</button>` : ''}${moves}</div></article>`;
   }).join('');
   return rows || '<p class="panel">ماكو عناصر للعرض.</p>';
 }
 
-function catalogForm(kind, item, index) {
+function catalogForm(kind, item, index, copyId = '') {
   const isCategory = kind === 'categories';
   const isBanner = kind === 'banners';
   const name = isCategory ? item?.[1] : item?.name ?? item?.title;
@@ -106,7 +117,8 @@ function catalogForm(kind, item, index) {
   const category = isCategory ? '' : `<label>القسم<select name="category" required>${categoryOptions(selected,
     '<option value="">اختار القسم</option>')}</select></label>`;
   const extra = isCategory ? '' : isBanner ? `<label>نص زر الإعلان<input name="copy" maxlength="40" required value="${escape(item?.copy || '')}"></label>` :
-    `<label>السعر بالدينار العراقي<input name="price" type="number" min="1" max="1000000000" value="${item?.price ?? ''}" required></label>
+    `<label>سعر البيع للزبون بالدينار العراقي<input name="price" type="number" min="1" max="1000000000" value="${item?.price ?? ''}" required></label>
+    <label>كلفة شراء المنتج للأدمن بالدينار العراقي<input name="purchaseCost" type="number" min="0" max="1000000000" value="${item?.purchaseCost ?? ''}"></label>
     <label>الكمية المتوفرة<input name="stock" type="number" min="0" max="1000000" value="${item?.stock == null ? '' : availableStock(item)}"></label>
     <label>البراند<input name="brand" list="brand-suggestions" maxlength="80" value="${escape(item?.brand || '')}"></label>
     <datalist id="brand-suggestions">${[...new Set(products.map(p => p.brand).filter(Boolean))].map(brand =>
@@ -133,8 +145,8 @@ function catalogForm(kind, item, index) {
     <label>الوصف<textarea name="description" maxlength="600">${escape(item?.description || '')}</textarea></label>
     <label>صور إضافية للمنتج <small>اختياري، حتى 3 صور</small><input type="file" name="gallery" accept="${imageTypes}" multiple></label>
     ${item?.gallery?.length ? `<small>${item.gallery.length} صور إضافية محفوظة. اختيار صور جديدة يستبدلها.</small>` : ''}`;
-  return `<form class="panel narrow" data-content="${kind}" data-index="${item ? index : ''}">
-    <h2>${item ? 'تعديل' : 'إضافة'}</h2>
+  return `<form class="panel narrow" data-content="${kind}" data-index="${item && !copyId ? index : ''}" data-copy-id="${escape(copyId)}">
+    <h2>${copyId ? 'نسخ المنتج' : item ? 'تعديل' : 'إضافة'}</h2>
     <label>${isBanner ? 'عنوان الإعلان' : 'الاسم'}<input name="name" maxlength="80" required value="${escape(name || '')}"></label>
     ${!isBanner ? `<label>الاسم بالإنجليزية<input name="nameEn" maxlength="80" dir="ltr" value="${escape(isCategory ? item?.[3] || '' : item?.nameEn || '')}"></label>` : ''}
     ${category}${extra}${image ? photo(image,'الصورة الحالية','thumb') : ''}
@@ -186,6 +198,7 @@ async function saveCatalogItem(form, data) {
   const index = form.dataset.index === '' ? -1 : Number(form.dataset.index);
   const list = catalogLists[kind];
   const previous = list[index];
+  const source = previous || (kind === 'products' && form.dataset.copyId ? products.find(p => p.id === form.dataset.copyId) : undefined);
   const name = data.get('name').trim();
   const category = data.get('category');
   const copy = data.get('copy')?.trim();
@@ -200,7 +213,7 @@ async function saveCatalogItem(form, data) {
     const file = data.get('image');
     const isCategory = kind === 'categories';
     const image = file?.size ? await readCatalogImage(file)
-      : isCategory ? previous?.[2] || previous?.[0] : previous?.image;
+      : isCategory ? source?.[2] || source?.[0] : source?.image;
     if (!image) throw new Error('اختار صورة رئيسية.');
     const id = 'custom-' + crypto.randomUUID();
     let item;
@@ -209,8 +222,9 @@ async function saveCatalogItem(form, data) {
     } else if (kind === 'products') {
       const files = data.getAll('gallery').filter(file => file.size);
       if (files.length > 3) throw new Error('اختار 3 صور إضافية كحد أقصى.');
-      const gallery = files.length ? await Promise.all(files.map(readCatalogImage)) : previous?.gallery;
-      item = {...previous,id:previous?.id || id,name,category,image,gallery,price:Number(data.get('price')),
+      const gallery = files.length ? await Promise.all(files.map(readCatalogImage)) : source?.gallery;
+      item = {...source,id:previous?.id || id,name,category,image,gallery,price:Number(data.get('price')),
+        purchaseCost:data.get('purchaseCost') ? Number(data.get('purchaseCost')) : null,
         stock:Number(data.get('stock')) + soldQuantity(previous?.id),description:data.get('description').trim(),
         type:data.get('type')?.trim() || '',barcode:data.get('barcode')?.trim() || '',expiry:parseExpiry(data.get('expiry'))};
       for (const field of ['nameEn','descriptionEn','brand','size','skin','coverage','usage']) item[field] = data.get(field)?.trim() || '';
@@ -379,4 +393,13 @@ function updateExpiryBell() {
 function productAlerts(product) {
   return [availableStock(product) <= 5 || product.variants?.some(v => availableStock(product,v.name) <= 5) ? 'low' : '',
     expiryStatus(product.expiry) ? 'expiry' : ''].filter(Boolean);
+}
+
+function toggleExpiryProduct(id) {
+  if (!previewAsManager) return;
+  const item = products.find(product => product.id === id);
+  if (!item || !expiryStatus(item.expiry)) return;
+  try { persistCatalog('products',products.map(product => product === item ? {...product,hidden:!item.hidden} : product)); }
+  catch { notify('تعذّر الحفظ.'); return; }
+  render();
 }

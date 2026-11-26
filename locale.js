@@ -217,6 +217,17 @@ const english = Object.fromEntries(`
 اكتب تاريخ صحيح بترتيب يوم / شهر / سنة.|Enter a valid date in day / month / year order.
 البراند|Brand
 كل البراندات|All brands
+عرض السلة|View cart
+مسح الفلاتر|Clear filters
+إخفاء المنتجات المنتهية تلقائياً|Automatically hide expired products
+نسخ المنتج|Duplicate product
+تعديل الصلاحية|Edit expiry date
+إظهار المنتج|Show product
+إخفاء المنتج|Hide product
+كلفة الشراء|Purchase cost
+كلفة شراء المنتج للأدمن بالدينار العراقي|Admin purchase cost in IQD
+سعر البيع للزبون بالدينار العراقي|Customer sale price in IQD
+تعذّر الحفظ.|Could not save.
 الباركود|Barcode
 مسح الباركود بالكاميرا|Scan barcode with camera
 إغلاق الكاميرا|Close camera

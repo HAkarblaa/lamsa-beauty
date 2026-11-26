@@ -88,6 +88,7 @@ function catalogForm(kind, item, index) {
   const extra = isCategory ? '' : isBanner ? `<label>نص زر الإعلان<input name="copy" maxlength="40" required value="${escape(item?.copy || '')}"></label>` :
     `<label>السعر بالدينار العراقي<input name="price" type="number" min="1" max="1000000000" value="${item?.price ?? ''}" required></label>
     <label>الكمية المتوفرة<input name="stock" type="number" min="0" max="1000000" value="${item?.stock == null ? '' : availableStock(item)}" required></label>
+    <label>نوع المنتج<input name="type" maxlength="60" value="${escape(item ? productType(item) : '')}"></label>
     <label>الباركود<input name="barcode" dir="ltr" autocomplete="off" maxlength="128" value="${escape(item?.barcode || '')}"></label>
     <button class="secondary" type="button" data-scan-barcode>مسح الباركود بالكاميرا</button>
     <p data-barcode-status role="status" class="muted" hidden></p>
@@ -177,7 +178,7 @@ async function saveCatalogItem(form, data) {
       const gallery = files.length ? await Promise.all(files.map(readCatalogImage)) : previous?.gallery;
       item = {...previous,id:previous?.id || id,name,category,image,gallery,price:Number(data.get('price')),
         stock:Number(data.get('stock')) + soldQuantity(previous?.id),description:data.get('description').trim(),
-        barcode:data.get('barcode')?.trim() || '',expiry:data.get('expiry') || ''};
+        type:data.get('type')?.trim() || '',barcode:data.get('barcode')?.trim() || '',expiry:data.get('expiry') || ''};
       if (file?.size) delete item.detail;
     } else {
       item = {title:name,copy,image,route:'shop/' + category};
@@ -207,7 +208,7 @@ async function scanProductBarcode(form) {
   const video = camera.querySelector('video');
   const show = message => {
     status.hidden = false;
-    status.textContent = message;
+    status.textContent = translate(message);
   };
   if (!window.BarcodeDetector || !navigator.mediaDevices?.getUserMedia) {
     show('المسح بالكاميرا غير متاح بهالمتصفح. تگدر تكتب الباركود أو تستخدم قارئ باركود خارجي.');

@@ -30,7 +30,7 @@ function save() {
   updateNavigation();
 }
 function notify(message) {
-  notice.textContent = message;
+  notice.textContent = translate(message);
   clearTimeout(noticeTimer);
   noticeTimer = setTimeout(() => { notice.textContent = ''; }, 2400);
 }
@@ -47,15 +47,17 @@ function updateNavigation() {
     else link.removeAttribute('aria-current');
   });
   const count = state.cart.reduce((total,line) => total + line.qty,0);
-  document.querySelector('#count').textContent = count ? '(' + format.format(count) + ')' : '';
+  document.querySelector('#count').textContent = count ? format.format(count) : '';
 }
 function cards(items) {
   return items.length ? '<div class="grid">' + items.map(p =>
     '<article class="card"><a href="#product/' + p.id + '">' + photo(p.image,p.name) +
     '<strong>' + escape(p.name) + '</strong></a><span class="price">' + money(p.price) +
     (p.old ? '<del>' + money(p.old) + '</del>' : '') +
-    '</span><button data-add="' + p.id + '"' + (availableStock(p) === 0 ? ' disabled>نفد المخزون' : '>أضيفي للسلة') +
-    '</button></article>').join('') +
+    '</span>' + (p.shades?.length && availableStock(p) > 0
+      ? '<a class="button card-action" href="#product/' + p.id + '">اختاري الدرجة</a>'
+      : '<button data-add="' + p.id + '"' + (availableStock(p) === 0 ? ' disabled>نفد المخزون' : '>أضيفي للسلة') + '</button>') +
+    '</article>').join('') +
     '</div>' : '<p class="panel">ماكو منتجات للعرض حالياً.</p>';
 }
 function categoryCards() {
@@ -70,47 +72,62 @@ function updateBanner() {
   const banner = document.querySelector('#banner');
   if (!banner) return;
   const b = banners[slide];
+  if (!b) return;
   banner.innerHTML = '<a class="hero" href="#' + b.route + '"><div><h1>' + escape(b.title) +
     '</h1><span class="button">' + escape(b.copy) + '</span></div>' + photo(b.image) + '</a>';
+  localize(banner);
   document.querySelectorAll('[data-slide]').forEach((button,i) =>
     button.setAttribute('aria-pressed',String(i === slide)));
 }
 function home() {
+  const recent = [...products].reverse().slice(0,6);
   return searchBox() + '<div id="home-content"><div id="banner"></div><div class="dots" aria-label="العروض">' +
     banners.map((_,i) => '<button data-slide="' + i + '" aria-label="عرض ' + (i+1) + '"></button>').join('') +
-    '</div><div class="strip">توصيل لكل المحافظات</div><div class="row"><h2>الأقسام</h2><a href="#categories">عرض الكل</a></div>' +
-    '<div class="chips">' + categories.map(([id,name]) => '<a class="button secondary" href="#shop/' + id + '">' + escape(name) + '</a>').join('') +
-    '</div><h2>عروض مميزة</h2>' + cards(products.filter(p => p.old || p.category === 'offers')) + '</div><div id="results" hidden></div>';
+    '</div><div class="row"><h2>الأقسام</h2><a href="#categories">عرض الكل</a></div>' + categoryCards() +
+    '<div class="row"><h2>وصل حديثاً</h2><a href="#shop">عرض الكل</a></div>' + cards(recent) +
+    '<div class="row"><h2>عروض مميزة</h2><a href="#shop/offers">عرض الكل</a></div>' +
+    cards(products.filter(p => p.old || p.category === 'offers')) + '</div><div id="results" hidden></div>';
 }
 function shop(id) {
   const category = categories.find(row => row[0] === id);
+  const types = [...new Set([...(Object.hasOwn(categoryTypes,id) ? categoryTypes[id] : []),
+    ...products.filter(p => p.category === id).map(productType).filter(Boolean)])];
+  const filter = types.length ? '<label>نوع المنتج<select id="type-filter"><option value="">كل الأنواع</option>' +
+    types.map(type => '<option value="' + escape(type) + '">' + escape(type) + '</option>').join('') + '</select></label>' : '';
   return '<h1>' + escape(category?.[1] || 'كل المنتجات') + '</h1>' + searchBox() +
-    '<label>ترتيب المنتجات<select id="sort"><option value="">الافتراضي</option><option value="low">السعر من الأقل</option>' +
-    '<option value="high">السعر من الأعلى</option></select></label><div id="results"></div>';
+    '<div class="admin-filters">' + filter + '<label>ترتيب المنتجات<select id="sort"><option value="">الافتراضي</option>' +
+    '<option value="low">السعر من الأقل</option><option value="high">السعر من الأعلى</option></select></label></div><div id="results"></div>';
 }
 function updateResults() {
   const results = document.querySelector('#results');
   if (!results) return;
   const {path,param} = route();
-  const query = document.querySelector('#search').value.trim();
+  const query = document.querySelector('#search').value.trim().toLowerCase();
+  const type = document.querySelector('#type-filter')?.value;
   if (path === 'home') {
     document.querySelector('#home-content').hidden = Boolean(query);
     results.hidden = !query;
     if (!query) return;
   }
-  const list = products.filter(p => (!param || (p.category === param || (param === 'offers' && p.old))) && p.name.includes(query));
+  const list = products.filter(p => (!param || (p.category === param || (param === 'offers' && p.old))) && (!type || productType(p) === type) &&
+    [p.name,translate(p.name)].some(name => name.toLowerCase().includes(query)));
   const sort = document.querySelector('#sort')?.value;
   if (sort) list.sort((a,b) => sort === 'low' ? a.price-b.price : b.price-a.price);
   results.innerHTML = cards(list);
+  localize(results);
 }
 function detail(id) {
   const p = products.find(item => item.id === id);
   if (!p) return '<h1>المنتج غير موجود</h1>';
   const shades = ['#a3283f','#b35470','#97594e','#c58d7a'];
-  return '<section class="narrow"><h1>' + escape(p.name) + '</h1>' + photo(p.detail || p.image,p.name,'detail') +
+  const images = [...new Set([p.detail || p.image,p.image,...(p.gallery || [])])];
+  const gallery = '<div class="product-photos" id="product-photos" tabindex="0" aria-label="صور المنتج">' +
+    images.map(src => photo(src,p.name,'detail')).join('') + '</div>' +
+    (images.length > 1 ? '<div class="row gallery-controls"><button type="button" class="secondary" data-photo-step="-1" aria-label="الصورة السابقة">‹</button>' +
+      '<button type="button" class="secondary" data-photo-step="1" aria-label="الصورة التالية">›</button></div>' : '');
+  return '<section class="narrow"><h1>' + escape(p.name) + '</h1>' + gallery +
     '<div class="row"><h2>' + money(p.price) + '</h2><button class="secondary" data-favorite="' + p.id +
     '">' + (state.favorites.includes(p.id) ? '♥ إزالة من المفضلة' : '♡ إضافة للمفضلة') + '</button></div>' +
-    (p.gallery?.length ? '<div class="grid product-gallery">' + p.gallery.map(src => photo(src,p.name)).join('') + '</div>' : '') +
     (p.stock == null ? '' : '<p>المتوفر ' + format.format(availableStock(p)) + '</p>') +
     (p.description ? '<p class="panel">' + escape(p.description) + '</p>' : '') +
     '<form id="add-form" data-product="' + p.id + '">' +
@@ -118,7 +135,7 @@ function detail(id) {
       '<label><input type="radio" name="shade" value="' + shade + '" ' + (i === 0 ? 'checked' : '') +
       '><span class="swatch" style="background:' + shades[i] + '"></span>' + shade + '</label>').join('') + '</fieldset>' : '') +
     '<label>الكمية<input name="qty" type="number" min="1" max="99" value="1" required></label>' +
-    '<button class="full"' + (availableStock(p) === 0 ? ' disabled>نفد المخزون' : '>أضيفي للسلة') + '</button></form></section>';
+    '<div class="purchase-bar"><button class="full"' + (availableStock(p) === 0 ? ' disabled>نفد المخزون' : '>أضيفي للسلة') + '</button></div></form></section>';
 }
 function totals() {
   const subtotal = state.cart.reduce((sum,line) => sum + products.find(p => p.id === line.id).price * line.qty,0);
@@ -144,7 +161,8 @@ function cart() {
   }).join('');
   return '<h1>السلة</h1>' + lines + '<form class="panel" id="coupon"><label>رمز الخصم<input name="coupon" placeholder="BEAUTY10" ' +
     (state.coupon ? 'value="BEAUTY10"' : '') + '></label><button>تطبيق</button></form>' + summary() +
-    '<a class="button full" href="#checkout">إكمال الطلب</a>';
+    '<div class="purchase-bar row"><div><strong>الإجمالي</strong><br>' + money(totals().total) +
+    '</div><a class="button" href="#checkout">إكمال الطلب</a></div>';
 }
 const provinces = ['بغداد','البصرة','نينوى','أربيل','السليمانية','دهوك','كركوك','الأنبار','صلاح الدين','ديالى','واسط','بابل','كربلاء','النجف','القادسية','المثنى','ذي قار','ميسان','حلبجة'];
 function checkout() {
@@ -154,11 +172,11 @@ function checkout() {
     '<label>الاسم الكامل<input name="name" required maxlength="80"></label>' +
     '<label>رقم الهاتف<input name="phone" type="tel" inputmode="tel" pattern="[+0-9٠-٩ ]{8,16}" required></label>' +
     '<label>المحافظة<select name="province" required><option value="">اختاري المحافظة</option>' +
-    provinces.map(p => '<option>' + p + '</option>').join('') + '</select></label>' +
+    provinces.map(p => '<option value="' + escape(p) + '">' + p + '</option>').join('') + '</select></label>' +
     '<label>المنطقة والعنوان<textarea name="address" required maxlength="200">' +
     escape(state.profile?.address || '') + '</textarea></label></div>' +
     '<div class="panel"><h2>طريقة الدفع</h2>الدفع عند الاستلام</div>' +
-    (state.settings.contact ? '<p>تواصل المتجر: ' + escape(state.settings.contact) + '</p>' : '') + summary() +
+    (state.settings.contact ? '<p><span>تواصل المتجر:</span> ' + escape(state.settings.contact) + '</p>' : '') + summary() +
     '<button class="full">تأكيد الطلب</button></form></section>';
 }
 function login(signup = false) {
@@ -173,11 +191,13 @@ function login(signup = false) {
 function settings() {
   if (!previewAsManager) return profile();
   const {name,contact,delivery} = state.settings;
+  const background = storeBackground();
   return '<a class="button secondary" href="#manage">‹ لوحة الإدارة</a><h1>إعدادات المتجر</h1><form class="panel narrow" id="store-settings">' +
     '<label>اسم المتجر<input name="name" value="' + escape(name) + '" maxlength="60" required></label>' +
     '<label>معلومات التواصل<input name="contact" value="' + escape(contact) + '" maxlength="120"></label>' +
     '<label>رسوم التوصيل بالدينار العراقي<input name="delivery" type="number" min="0" max="1000000" value="' +
-    delivery + '" required></label><button>حفظ</button></form>';
+    delivery + '" required></label><label>لون خلفية المتجر<input name="background" type="color" value="' +
+    background + '"></label><button>حفظ</button></form>';
 }
 function account() {
   if (previewAsManager) return '<h1>حسابي</h1><div class="panel"><h2>' +
@@ -213,9 +233,13 @@ function orderContent(id) {
     ' × ' + format.format(item.qty) + '</span><span>' + money(item.price * item.qty) + '</span></div>'
   ).join('') + '</div>' : '';
   return '<h1>' + orderStatuses[status] + '</h1><div class="panel"><p>رقم الطلب <bdi>#' + escape(order.id) + '</bdi></p>' +
-    '<p>المحافظة ' + escape(order.province) + '</p><p>الإجمالي ' + money(order.total) +
+    '<p><span>المحافظة</span> ' + escape(translate(order.province)) + '</p><p><span>الإجمالي</span> ' + money(order.total) +
     '</p><p>الدفع عند الاستلام</p><p class="muted">طلب تجريبي محفوظ على هذا الجهاز.</p></div>' +
     items + editor + '<a class="button" href="#orders">' + orderLabel + '</a>';
+}
+function storeBackground() {
+  const color = state.settings.background;
+  return /^#[0-9a-f]{6}$/i.test(color || '') ? color : '#fff9f6';
 }
 function render(scroll = false) {
   const {path,param} = route();
@@ -235,8 +259,11 @@ function render(scroll = false) {
     }, 6500);
   }
   if (path === 'shop') updateResults();
-  document.title = state.settings.name;
-  document.querySelector('#store-brand').lastChild.textContent = ' ' + state.settings.name;
+  document.documentElement.style.setProperty('--store-bg',storeBackground());
+  view.classList.toggle('has-purchase-bar',Boolean(view.querySelector('.purchase-bar')));
+  localize(view);
+  document.title = translate(state.settings.name);
+  document.querySelector('#store-brand').lastChild.textContent = ' ' + translate(state.settings.name);
   updateNavigation();
   if (scroll) window.scrollTo(0,0);
 }
@@ -264,8 +291,9 @@ view.addEventListener('input', event => {
   if (['admin-search','admin-category-filter'].includes(event.target.id)) {
     document.querySelector('#admin-list').innerHTML = catalogRows('products',
       document.querySelector('#admin-search').value.trim(),document.querySelector('#admin-category-filter').value);
+    localize(document.querySelector('#admin-list'));
   }
-  if (event.target.id === 'search' || event.target.id === 'sort') updateResults();
+  if (['search','sort','type-filter'].includes(event.target.id)) updateResults();
 });
 view.addEventListener('click', event => {
   const button = event.target.closest('button');
@@ -273,6 +301,11 @@ view.addEventListener('click', event => {
   if (button.hasAttribute('data-scan-barcode')) { scanProductBarcode(button.form); return; }
   if (button.hasAttribute('data-stop-barcode')) { stopProductBarcodeScan?.(); return; }
   const data = button.dataset;
+  if (data.photoStep) {
+    const gallery = document.querySelector('#product-photos');
+    gallery.scrollBy({left:Number(data.photoStep) * gallery.clientWidth * (language === 'ar' ? -1 : 1),behavior:'auto'});
+    return;
+  }
   if (data.move) { moveCatalogItem(data.move); return; }
   if (data.add) addProduct(data.add,'',1);
   if (data.slide !== undefined) { slide = Number(data.slide); updateBanner(); }
@@ -332,7 +365,7 @@ view.addEventListener('submit', event => {
   } else if (form.id === 'store-settings' && previewAsManager) {
     const name = data.get('name').trim();
     if (!name) { notify('اكتب اسم المتجر'); return; }
-    state.settings = {name, contact:data.get('contact').trim(), delivery:Number(data.get('delivery'))};
+    state.settings = {name, contact:data.get('contact').trim(), delivery:Number(data.get('delivery')),background:data.get('background')};
     save();
     render();
     notify('تم حفظ إعدادات المتجر');
@@ -376,12 +409,13 @@ document.querySelector('#menu-orders').textContent = orderLabel;
 function showMenuSections(show) {
   menuMain.hidden = show;
   menuSections.hidden = !show;
-  menuHeading.textContent = show ? 'الأقسام' : 'القائمة المختصرة';
+  menuHeading.textContent = translate(show ? 'الأقسام' : 'القائمة المختصرة');
 }
 menuCategories.addEventListener('click', () => {
   document.querySelector('#menu-section-links').innerHTML = categories.map(([id,name]) =>
     '<li><a href="#shop/' + id + '">' + escape(name) + '</a></li>'
   ).join('');
+  localize(menuSections);
   showMenuSections(true);
   quickMenu.scrollTop = 0;
   menuBack.focus();
@@ -393,7 +427,7 @@ menuBack.addEventListener('click', () => {
 menuToggle.addEventListener('click', () => {
   showMenuSections(false);
   document.querySelector('#menu-name').textContent = previewAsManager
-    ? state.settings.name : state.profile?.name || '';
+    ? translate(state.settings.name) : state.profile?.name || '';
   quickMenu.showModal();
   quickMenu.scrollTop = 0;
   menuToggle.setAttribute('aria-expanded','true');
@@ -409,5 +443,18 @@ window.addEventListener('hashchange', () => {
   stopProductBarcodeScan?.();
   if (quickMenu.open) quickMenu.close();
   render(true);
+});
+const languageSelect = document.querySelector('#store-language');
+languageSelect.value = language;
+document.documentElement.lang = language === 'ar' ? 'ar-IQ' : 'en';
+document.documentElement.dir = language === 'ar' ? 'rtl' : 'ltr';
+localize(document.body);
+languageSelect.addEventListener('change', () => {
+  try {
+    localStorage.setItem('lamsa-language',languageSelect.value);
+    location.reload();
+  } catch {
+    languageSelect.value = language;
+  }
 });
 render();

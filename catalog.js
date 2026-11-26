@@ -19,3 +19,18 @@ const banners = [
   {title:'ألوان تناسب كل إطلالة', copy:'اكتشفي منتجات الشفاه', image:'lips', route:'shop/lips'},
   {title:'فرش وأدوات المكياج', copy:'تسوّقي الأدوات', image:'brushes', route:'shop/brushes'}
 ];
+
+const categoryTypes = {
+  face:['كريم أساس','كونسيلر','بودرة','بلاشر'],
+  eyes:['ظلال العيون','آيلاينر','ماسكارا'],
+  lips:['أحمر الشفاه','ملمع الشفاه'],
+  skin:['سيروم','مرطب'],
+  brushes:['فرش','إسفنج']
+};
+function productType(product) {
+  if (product.type) return product.type;
+  const fixed = {foundation:'كريم أساس',palette:'ظلال العيون',lipstick:'أحمر الشفاه',serum:'سيروم',brush:'فرش',liner:'آيلاينر'};
+  if (Object.hasOwn(fixed,product.id)) return fixed[product.id];
+  if (product.id.startsWith('lip-')) return product.name.startsWith('ملمع') ? 'ملمع الشفاه' : 'أحمر الشفاه';
+  return '';
+}
